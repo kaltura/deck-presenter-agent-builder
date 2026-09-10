@@ -14,20 +14,9 @@ import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT,
 import { connect, adminKs } from './lib/kaltura.mjs';
 import { loadContent } from './lib/load-content.mjs';
 import { loadState, newState, recordStep, assertPartnerMatch } from './lib/state.mjs';
+import { assertNamedResourceFree } from './lib/tool-guard.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function assertNamedResourceFree(list, name, ourExistingId) {
-  for await (const item of list) {
-    if (item.name === name) {
-      if (ourExistingId && String(item.id) === String(ourExistingId)) return item;
-      throw new Error(
-        `"${name}" already exists on this account (id ${item.id}) and is not recorded in this project's own state. Refusing to create a duplicate or adopt a resource this project did not create.`,
-      );
-    }
-  }
-  return null;
-}
 
 async function main() {
   const flags = parseFlags(process.argv.slice(2));
