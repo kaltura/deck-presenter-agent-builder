@@ -1,0 +1,34 @@
+{
+  "slug": "",
+  "personaName": "",
+  "productName": "",
+  "productOrTopic": "",
+  "companyName": "",
+  "language": "en",
+  "audience": "",
+  "tone": "",
+  "restrictedTopics": [],
+  "totalSlides": 0,
+  "chapters": [],
+  "features": {
+    "contactForm": true,
+    "endSessionTool": true,
+    "knowledgeBase": false,
+    "followUpEmail": false
+  },
+  "sessionMaxSeconds": 900,
+  "capabilities": {
+    "avatar": "on",
+    "use_content_search": "on"
+  },
+  "avatar": { "source": "fresh" },
+  "branding": {},
+  "disclosure": { "text": "", "locale": "en" },
+  "privacy": {
+    "controllerName": "",
+    "controllerContact": "",
+    "transcriptRetention": "none",
+    "retentionDays": 0,
+    "reuseForEval": false
+  }
+}

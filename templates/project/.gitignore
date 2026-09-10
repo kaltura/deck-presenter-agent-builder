@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.provisioning-state.json
+input/
+/dist.html
+*.local.md
+*.local.txt
+.DS_Store
