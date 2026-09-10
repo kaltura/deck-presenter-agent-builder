@@ -20,6 +20,7 @@ data/kb/
 # Per-project runtime state
 .provisioning-state.json
 .deploy-result.json
+.verify-snapshots/
 
 # Local-only notes and lists handed to an agent as context, never committed
 *.local.md
@@ -34,7 +35,9 @@ port/
 
 # Build output
 dist/
+dist.html
 *.tmp-*
+.bundle-entry.tmp.js
 
 # Node
 node_modules/

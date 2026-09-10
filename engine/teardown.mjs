@@ -9,9 +9,13 @@
 import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT, runMain } from './lib/cli.mjs';
 import { connect, adminKs } from './lib/kaltura.mjs';
 import { loadState, writeState, statePath } from './lib/state.mjs';
+import { deleteEntry, deleteShortLink } from './lib/ovp.mjs';
 
-/** Reverse of creation order in provision.mjs, so a category dies after what's filed under it. */
+/** Reverse of creation order: deploy.mjs runs after provision.mjs, so its ids die first. */
 const DELETE_ORDER = [
+  'shortLinkId',
+  'htmlEntryId',
+  'pdfEntryId',
   'widgetId', // no delete call exists for a widget id; it is dropped by deleting the agent.
   'agentId',
   'avatarId',
@@ -28,6 +32,9 @@ const DELETE_ORDER = [
 // on top of this engine's own confirmPlan(). Both must agree before anything is deleted.
 const CONFIRM = { confirmPermanent: true, force: true };
 const DELETERS = {
+  shortLinkId: (mgmt, id, ks) => deleteShortLink(ks, id),
+  htmlEntryId: (mgmt, id, ks) => deleteEntry(ks, id),
+  pdfEntryId: (mgmt, id, ks) => deleteEntry(ks, id),
   agentId: (mgmt, id, ks) => mgmt.agents.delete(id, ks, CONFIRM),
   avatarId: (mgmt, id, ks) => mgmt.avatars.delete(id, ks, CONFIRM),
   configId: (mgmt, id, ks) => mgmt.intellects.delete(id, ks, CONFIRM),
