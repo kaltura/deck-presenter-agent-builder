@@ -1,3 +1,9 @@
+---
+chapter: How It Works
+sourceSlides: [4, 6, 7]
+restrictedTopic: false
+---
+
 # Canopy FAQ (fictional demo content)
 
 Everything in this file describes a fictional product, invented only for this

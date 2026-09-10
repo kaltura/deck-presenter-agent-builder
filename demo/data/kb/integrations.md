@@ -1,3 +1,9 @@
+---
+chapter: How It Works
+sourceSlides: [5, 6, 7]
+restrictedTopic: false
+---
+
 # Canopy integrations (fictional demo content)
 
 Invented integration details for this demo's fictional product. None of this

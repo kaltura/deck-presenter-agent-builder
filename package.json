@@ -28,6 +28,7 @@
     "doctor": "node bin/doctor.mjs",
     "check-template-update": "node bin/check-template-update.mjs",
     "scan": "node bin/scan-leaks.mjs",
+    "lint-prompts": "node bin/lint-prompts.mjs --project demo && node bin/lint-prompts.mjs --project fixtures/smoke-project",
     "test": "node --test \"test/**/*.test.mjs\""
   },
   "dependencies": {

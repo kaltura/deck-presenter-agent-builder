@@ -1,3 +1,9 @@
+---
+chapter: How It Works
+sourceSlides: [4]
+restrictedTopic: false
+---
+
 # Canopy sensor specs (fictional demo content)
 
 Invented specifications for this demo's fictional sensor hardware. None of

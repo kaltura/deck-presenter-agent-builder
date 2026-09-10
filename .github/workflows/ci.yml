@@ -61,3 +61,19 @@ jobs:
       - run: npm ci
 
       - run: npm test
+
+  lint-prompts:
+    name: Semantic prompt lint (golden output)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      # Needs no live account: checks demo/'s and fixtures/smoke-project's
+      # already-generated ingestion and prompt-drafting output against
+      # PLAN.md 6.4's semantic lint (slide references, chapter ranges, KB
+      # frontmatter, the fixed identity-and-disclosure skeleton).
+      - run: npm run lint-prompts
