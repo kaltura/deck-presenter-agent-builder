@@ -914,9 +914,9 @@ function registerSessionEvents(sess) {
   sess.on('avatarStartTalking', () => { avatarSpeaking = true; el.avatarPip.classList.add('thinking'); });
   sess.on('avatarStopTalking', () => { avatarSpeaking = false; el.avatarPip.classList.remove('thinking'); });
   sess.on('interrupted', () => { avatarSpeaking = false; });
-  sess.on('transcript', ({ role, text, isFinal }) => {
-    if (!isFinal || !text) return;
-    if (role === 'user') {
+  sess.on('transcript', ({ type, text }) => {
+    if (type === 'partial' || !text) return;
+    if (type === 'user') {
       if (consumeTypedEcho(text)) return;
       appendChatMessage(text, 'user');
       markUserInteraction();
