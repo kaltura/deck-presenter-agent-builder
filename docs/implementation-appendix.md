@@ -22,7 +22,9 @@ const mgmt = new Management({ partnerId, adminSecret });
 const admin = await mgmt.sessions.createAdminToken();   // -> { ks, ... }
 ```
 
-Every management call takes `admin.ks` as its last argument. Resources used below: `mgmt.sessions`, `mgmt.tools`, `mgmt.knowledge`, `mgmt.intellects`, `mgmt.avatars`, `mgmt.agents`, `mgmt.application`.
+Every management call takes `admin.ks` as its last argument. Resources used below: `mgmt.sessions`, `mgmt.tools`, `mgmt.knowledge`, `mgmt.intellects`, `mgmt.avatars`, `mgmt.agents`, `mgmt.application`, `mgmt.catalog` (custom voice and visual), `mgmt.lifecycle` (post-session rules), plus the top-level `mgmt.converseOnce`.
+
+Named helpers exported alongside `Management`, all used below: `tools.client`, `tools.clientToolReadiness`, `stripServerManaged`, `lintPersonaIdentity`, `mergeCapabilityWrite`.
 
 **Credential rule (6.6).** `adminSecret` is read from the project's `.env` once, exchanged for a session key at run start, and never logged. `createAdminToken()` is that exchange. Pass `admin.ks` onward; never re-read the secret per call.
 
@@ -38,6 +40,27 @@ Every management call takes `admin.ks` as its last argument. Resources used belo
 | **tool** | A callable the intellect can invoke. The presenter needs one client-side navigation tool. UUID. |
 | **knowledge record** / `knowledgeId` | A RAG corpus definition pointing at a category of uploaded entries. Numeric id. |
 | **widget id** | The public embed handle the client needs. Kaltura entry-id shape (`N_xxxxxxxx`). |
+
+## One content module, imported everywhere
+
+No command in `engine/` contains prompt text, a tool description, a slide count, or a persona name. One module reads the project's files and exports every payload constant (PLAN.md 5). Shape:
+
+```js
+const readPrompt = (name) => readFileSync(resolve(PROMPTS_DIR, name), 'utf8').trim();
+const TOTAL_SLIDES = readdirSync(SLIDES_DIR).filter((f) => f.endsWith('.json')).length;
+
+export const BASE_DIRECTIVE = readPrompt('base-directive.md')
+  .replaceAll('{{TOTAL_SLIDES}}', String(TOTAL_SLIDES));
+export const PROMPTS = [ /* prompt blocks, below */ ];
+export const GLOSSARY = readPrompt('glossary.md');
+export const CAPABILITIES = { /* all 15 keys, below */ };
+export const NAV_TOOL = { name, description, args };
+export const OPENING_PHRASE = readPrompt('opening-phrase.md');
+```
+
+A prompt block is `{ key, label, headerTemplate, type: 'custom', value }`. `headerTemplate` is the line the platform wraps the value in when it assembles the system prompt, so it belongs to the block, not to the file body.
+
+Derive counts, never hardcode them. `TOTAL_SLIDES` from `readdirSync` cannot drift from the files on disk; a literal can.
 
 ## Provisioning: nine steps in order
 
@@ -151,6 +174,38 @@ Log `intel.warnings` if non-empty. They are advisory, not failures.
 
 One write, not a create-then-patch, because 6.6 records one id per step and a half-configured active intellect is reachable.
 
+#### The capability map, in full
+
+The SDK exports the canonical frozen list. There are 15 keys, each `'on'`, `'off'`, or `'disabled'`:
+
+| Key | Default | What it is |
+|---|---|---|
+| `use_knowledge_base` | on | RAG over the linked knowledge records. **Required.** |
+| `use_content_search` | on | Search across account content. |
+| `use_get_entry_content` | on | Read a specific entry's content. |
+| `generate_followup_questions` | on | Suggested next questions. |
+| `include_sources` | on | Citations in the answer. |
+| `use_related_files` | on | Surfaces sibling files. |
+| `kaltura_genie_experiences` | on | Platform experience integrations. |
+| `avatar` | off | **Required for a presenter.** Switches the model to the avatar path. |
+| `avatar_filler` | off | Spoken filler while the model thinks. |
+| `avatar_show_content` | off | Lets the avatar surface content panels. |
+| `video_gallery` | off | Gallery responses. |
+| `external_video` | off | External video responses. |
+| `show_link` | off | Link responses. |
+| `use_web_search` | off | Web search. |
+| `screen_share_analysis` | off | Screen-share vision. |
+
+Five rules, each learned the hard way:
+
+1. **`capabilities` is a full-replace sub-dict.** The intellect `update` call is otherwise a patch that preserves omitted top-level fields, but a partial `capabilities` dict **drops every key you did not send**. Always write all 15. `mergeCapabilityWrite` does the read-merge-write if you only have a delta.
+2. **`disabled` is an account-level veto.** It overrides a per-request `on`. The SDK refuses to write over a stored `disabled` unless you pass `force: true`. That guard is a convenience, not a permission boundary.
+3. **`think_process` is not a capability.** It appears in older notes. Sending it makes intellect creation return 500.
+4. **The resolved value is cached at the account-config layer for up to roughly 24 hours.** Get it right at creation. A later flip may not reach a live session promptly, which is why pre-flight checks `use_knowledge_base === 'on'` before anything is created.
+5. **`avatar_filler` phrasing is server-generated and cannot be steered from the base directive.** If the filler does not fit the persona, the only lever is turning it off.
+
+No endpoint enumerates the capabilities or the account's per-key settings, so the list above is the contract. Fail pre-flight on an unknown key rather than sending it.
+
 ### 6. Corpus readiness poll
 
 ```js
@@ -179,6 +234,36 @@ Copy `visual` wholesale. It carries `motionControl` and framing fields beyond `i
 
 Write `avatar.source` (`"cloned"` or `"fresh"`) back to `project.json` here, so the client knows whether to render the synthetic-content label (PLAN.md 9).
 
+#### Creating a voice or visual from a sample
+
+Instead of copying an existing avatar's ids, mint new catalog items. Both calls take a web `File`:
+
+```js
+const file = new File([buf], 'sample.jpg', { type: 'image/jpeg' });
+const visual = await mgmt.catalog.createVisual(file, {
+  name,
+  genderPresentation, hairColor,          // descriptive metadata
+  consentRef,                             // see below
+}, admin.ks);
+// -> visual.itemId
+
+await mgmt.avatars.update({
+  id: avatarId,
+  visual: { id: visual.itemId, motionControl: { speaking: 0.6, nonSpeaking: 0.2 } },
+}, admin.ks);
+```
+
+`mgmt.catalog.createVoice` is the same shape for an audio sample.
+
+Four things to get right:
+
+- **`consentRef` is a real field, so write the consent record's identifier into it.** That is the platform-side half of the PLAN.md 10 gate: the record lives in the project repo and its reference travels with the catalog item. Include who provided it, when, and what use it covers.
+- **Neither call is idempotent.** Every run creates a new catalog item and orphans the previous one. Skip the step when state already has an id; on `--force`, print the id being orphaned.
+- **The live avatar stream is square, 512 by 512.** A portrait photo gets letterboxed.
+- **Padding a portrait to square with a flat colour shows as visible bars in the stream.** Extend the backdrop and the subject's shoulders past the original photo edges instead, so the square crop has real image in every corner. This is an image-preparation step before the API call, not an API setting.
+
+`motionControl` values (`speaking`, `nonSpeaking`) are motion amplitude. They live on the `visual` object, so an `avatars.update` that sends `visual` without them resets them.
+
 ### 8. Agent
 
 ```js
@@ -187,12 +272,16 @@ const ag = await mgmt.agents.create({
   intellect: { intellectType: 'genie', id: intel.configId },
   avatarIds: [av.id],
   adminTags: [...tags],            // tags go HERE, not on the avatar
-  maxConversationLength: 900,      // seconds
+  maxConversationLength: sessionMaxSeconds,
 }, admin.ks);
 // -> ag.agentId   (UUID)
 ```
 
 `intellectType: 'genie'` is the value for an internal intellect.
+
+**`maxConversationLength` is seconds, server range 1 to 3600.** Take it from `project.json.sessionMaxSeconds` and cross-check it against the duration the client's welcome copy promises. A default that undershoots the promise ends the session early and reads as a crash.
+
+`mgmt.agents.get(agentId, ks)` reads back `.intellect.configId`, `.intellect.id`, `.avatarIds[]`, and `.appGuid`. That is the way to recover ids from an agent when state is missing.
 
 ### 9. Widget id
 
@@ -211,6 +300,94 @@ const smoke = await mgmt.converseOnce(intel.configId, 'Hello! What can you help 
 ```
 
 One text turn. Creates a conversation, changes no config. A failure here warns; the provisioned stack is still valid and 6.8 will exercise it properly.
+
+## Optional stage: extra client tools
+
+The presenter needs one navigation tool (step 1). A contact form and an end-session button are two more client tools with the identical shape, which is why the engine ships **one** generic `attach-tool` command rather than one per tool.
+
+```js
+const wanted = tools.client(TOOL_DEF);   // marks it client-executed
+
+// The server adds its own defaults (display_name, add_to_history, per-arg
+// defaults), so compare only the keys you set, recursively.
+const subset = (want, have) =>
+  (want && typeof want === 'object' && !Array.isArray(want))
+    ? Object.keys(want).every((k) => subset(want[k], have?.[k]))
+    : JSON.stringify(want) === JSON.stringify(have);
+
+const created = await mgmt.tools.add(wanted, admin.ks);            // create once
+await mgmt.tools.update(created.id, { name: wanted.name, config: wanted }, admin.ks);
+```
+
+Then attach it, read-merge-write:
+
+```js
+const before = await mgmt.intellects.get(configId, admin.ks);
+const body = stripServerManaged(before, configId);      // drops read-only fields
+body.tool_ids = [...(before.tool_ids || []), created.id];
+
+const readiness = tools.clientToolReadiness(body);      // -> { warnings[] }
+await mgmt.intellects.update(body, admin.ks);
+```
+
+`stripServerManaged` exists because a plain round-trip of a `get` result fails validation: the response carries fields the update endpoint rejects. Never hand-maintain that list.
+
+`clientToolReadiness` warns when the intellect is configured in a way that stops a client tool from ever firing. Print its warnings; they are the difference between a tool that exists and a tool that works.
+
+After the write, assert that `base_directive`, `prompts`, `knowledge_ids`, `capabilities`, and `status` are unchanged, and exit non-zero if not. Attaching a tool must not silently rewrite the persona.
+
+## Optional stage: follow-up email after a session
+
+Off by default (PLAN.md 10). Two lifecycle rules plus one email template. This is the only part of the pipeline that uses a second Kaltura API.
+
+**Rule A, extract insights when the session ends:**
+
+```js
+await mgmt.lifecycle.create({
+  name, systemName,
+  eventType: 'session_ended', objectType: 'thread',
+  action: {
+    actionType: 'triggerInsight',
+    insights: [
+      { insightKey: 'TOPIC',    valueType: 'string', prompt: '...' },
+      { insightKey: 'FEEDBACK', valueType: 'string', prompt: '...' },
+      { insightKey: 'CONTACT',  valueType: 'string', prompt: '...' },
+    ],
+  },
+}, admin.ks);
+```
+
+**Rule B, email once all of them have landed:**
+
+```js
+await mgmt.lifecycle.create({
+  name, systemName,
+  eventType: 'analysis_updated', objectType: 'thread',
+  eventConditions: [{
+    field: 'changed_keys', operator: 'has_all',
+    value: ['SUMMARY', 'TOPIC', 'FEEDBACK', 'CONTACT'],
+  }],
+  action: { actionType: 'sendInsightEmail', recipients, templateId },
+}, admin.ks);
+```
+
+Five design points:
+
+- **Do not request a `SUMMARY` insight.** Every account gets one from an always-on system preset that merges into the same batch. Requesting it duplicates work. Rule B still waits on it, which is why it is in `changed_keys`.
+- **Do not condition rules on `object.agent_id`.** The client mints widget tokens, so real production threads arrive with `agent_id: "default"` and an agent-id condition never matches. This is the single easiest way to ship rules that silently never fire.
+- **Idempotency is by `systemName`.** `for await (const rule of mgmt.lifecycle.list(admin.ks))` and match on it before creating.
+- **Dry-run both rules before declaring success:** `mgmt.lifecycle.match(objectType, eventType, { object: syntheticObject }, admin.ks)`. A rule that exists but does not match is the normal failure, not an exception.
+- **Flatten match results defensively.** Every entry nests its rules under `.rules[]` regardless of grouping, so `mr.flatMap((e) => e.rules ? e.rules.map((r) => r.id) : [e.id])`.
+
+The agent's own summary wording is a separate field: `mgmt.agents.update({ agentId, summaryOverridePrompt }, admin.ks)`.
+
+### The email template
+
+Separate infrastructure: the classic Kaltura Messaging API, not the management SDK. Base `https://messaging.<region>.ovp.kaltura.com/api/v1`, with `email-template/list` filtered by admin tags, then `email-template/update` in place or `email-template/create`.
+
+- **Look `appGuid` up live from `mgmt.agents.get(agentId).appGuid`. Never hardcode it.** It regenerates whenever the agent is re-provisioned, and a stale one makes `sendInsightEmail` fail silently: the rule fires, the template resolves, no mail arrives. If the value changed, leave the old template alone and create a fresh one.
+- `emailProviderId` is an account-level setting, so reading it from config is fine.
+- Placeholders in the body are `{TOKEN}`. Use **inline CSS only**, so the body contains no other braces for the template engine to choke on.
 
 ## Failure, resume, and state
 
@@ -270,7 +447,30 @@ Three things this pattern gets right and a naive `update` does not:
 
 `setPrompts` returns `lint.findings[]`. Print the `severity: 'warning'` ones.
 
-Other update calls with the same read-merge-write contract: `mgmt.intellects.setCapabilities(configId, dict, ks)`, `mgmt.intellects.setClientVariablesEnabled(configId, bool, ks)`, `mgmt.intellects.setPrompts`. For point edits there are also `snapshot(configId, ks)` / `restore(snapshot, ks)` / `diffSnapshots(a, b)`, which are the right primitive behind a `--dry-run` diff.
+For point edits there are also `snapshot(configId, ks)` / `restore(snapshot, ks)` / `diffSnapshots(a, b)`, which are the right primitive behind a `--dry-run` diff.
+
+### The six update commands and their calls
+
+Every field the pipeline writes is reachable from one of these. Do not grow this into one command per field.
+
+| Command | Calls |
+|---|---|
+| `update-prompts` | `mgmt.intellects.setPrompts(configId, PROMPTS, ks, { baseDirective, glossary })` → `{ result, lint }` |
+| `update-capabilities` | `mgmt.intellects.setCapabilities(configId, CAPABILITIES, ks)` → `{ capabilities, result }`. Also `setClientVariablesEnabled(configId, bool, ks)`. |
+| `update-avatar` | `mgmt.avatars.update({ id, openingPhrase })`, or with `voice` / `visual` / `visual.motionControl`. An idempotent patch: omitted fields are left alone. |
+| `update-agent` | `mgmt.agents.update({ agentId, displayName, adminTags, maxConversationLength, summaryOverridePrompt })` |
+| `attach-tool` | `mgmt.tools.add` / `mgmt.tools.update`, then the read-merge-write attach above. Config-only sync never calls `add`. |
+| `update-followup` | `mgmt.lifecycle.list` / `create` / `match`, plus the Messaging API template calls. |
+
+**`mgmt.agents.update` is a partial patch and rejects `intellect` outright.** The body is `{ agentId, ...fieldsYouAreChanging }`. Including `intellect` returns 400 even when the value is correct. To move an agent to a different intellect, that is not this call.
+
+### Persona identity spans three fields
+
+The persona name lives in `BASE_DIRECTIVE`, in the `name` prompt block, and in the avatar's `openingPhrase`. Two of them are on the intellect, one is on the avatar, so a rename touches two resources.
+
+Changing only `openingPhrase` leaves the model introducing itself by the old name, because the directive and the prompt block still carry it. `update-prompts` and `update-avatar` therefore both read the current value of all three and refuse to write a set that disagrees.
+
+`lintPersonaIdentity` is the SDK's check for exactly this. `setPrompts` returns its findings in `lint.findings[]`; run it in `--dry-run` too, so the mismatch surfaces before the write.
 
 ## Bundle and deploy (6.7)
 
@@ -338,6 +538,38 @@ The bundler inlines `client/` plus the vendored SDK plus generated data into one
 - **Read `SDK_VERSION` from the SDK's own `package.json`** so the version shown in the UI cannot drift from what shipped.
 - The bundle is self-contained except two CDN scripts (PDF rendering, websocket transport), which stay external. Validation asserts both are still referenced.
 
+## Client runtime contract (PLAN.md 9)
+
+The browser side uses the `experience` entry point. Startup:
+
+```js
+const token = await mgmt.sessions.createWidgetToken({ widgetId });   // re-mintable
+const sess = new KalturaAvatarSession({ ...token, videoEl, audioEl, toolCallName });
+```
+
+**Video and audio are separate elements.** A single element does not work for this layout, and `audioEl` is what the mute control in PLAN.md 9 acts on.
+
+`toolCallName` is the navigation tool's name from the content module, never a literal.
+
+### Events to handle
+
+| Group | Events |
+|---|---|
+| Connection | `stateChange`, `streamReady`, `mediaReady`, `error`, `warning` |
+| Speech | `avatarStartTalking`, `avatarStopTalking`, `interrupted`, `transcript`, `brainSegment`, `responsePending`, `responseSettled` |
+| Health | `reconnecting`, `reconnected`, `brainStalled`, `capacityChanged`, `toolSpiralDetected`, `toolSpiralRecovering`, `spiralRecovered` |
+| Session | `disclosure`, `timeWarning`, `timeExpired`, `ended` |
+
+Handling notes that cost real debugging time:
+
+- **`streamReady` is not `mediaReady`.** The stream can exist before media is playable. Gate the UI on `mediaReady`.
+- **Autoplay blocking is normal.** Keep a one-time click that calls `sess.startPlayback()`.
+- **The navigation tool call can arrive before `avatarStopTalking`.** Drive slide state from the tool call. Waiting for the speech event makes the deck lag the narration.
+- **On `brainStalled`, re-send once with a resume instruction** that names the current slide and says to continue presenting it and not to navigate. Without the no-navigate clause the recovery jumps the deck.
+- **Captions have no separate server channel.** They are rendered from the same text stream, through `CaptionService(session, { replacements })` with `onCaption(({ text, clear }) => ...)`. `replacements` is the caption map from PLAN.md 5, which turns spoken-letter forms back into normal spelling. Default the toggle off and expose it on a button and a key.
+- **`disclosure` carries the platform's own AI-disclosure text.** It does not replace the always-on line in PLAN.md 9.
+- `timeWarning` and `timeExpired` fire against the agent's `maxConversationLength`, so the copy shown is derived from `sessionMaxSeconds`.
+
 ## Verify command (6.8)
 
 The verify command must be read-only, with no mutating call reachable from it. Useful shape, three subcommands:
@@ -365,6 +597,17 @@ The verify command must be read-only, with no mutating call reachable from it. U
 | Corpus poll passes but retrieval is empty | `corpusStatus` counts entries, it does not confirm embedding finished. |
 | `err.message` is just a status code | Read `err.detail` on `KalturaError`. |
 | Injected JS is corrupted in the bundle | String replacer expanded `$&` in the injected code. Use a function replacer. |
+| Capabilities you did not touch turned off | `capabilities` is full-replace. Write all 15 keys every time. |
+| Intellect creation returns 500 | `think_process` was sent. It is not a capability. |
+| A capability flip has no effect | Resolved value is cached at the account-config layer for ~24h. |
+| Agent still introduces itself by the old name | Only `openingPhrase` changed. The base directive and the `name` prompt block also carry it. |
+| `agents.update` returns 400 | The body included `intellect`. It is a partial patch and rejects that field. |
+| Duplicate voices or visuals piling up on the account | `catalog.createVoice` / `createVisual` are not idempotent. Skip when state has an id. |
+| Avatar looks letterboxed with dark side bars | The visual was a portrait padded to square. The stream is 512 by 512; extend the backdrop instead. |
+| Lifecycle rule exists but never fires | It was conditioned on `object.agent_id`. Widget-token threads carry `agent_id: "default"`. |
+| `sendInsightEmail` sends nothing | Hardcoded `appGuid`. Read it from `agents.get(agentId).appGuid`; it regenerates on re-provision. |
+| Intellect update rejects a body you just read | Round-tripped a `get` result. Pass it through `stripServerManaged` first. |
+| Deck lags the narration by one slide | Slide state waited for `avatarStopTalking` instead of the tool call. |
 
 ## Verification plan for the port
 
@@ -376,5 +619,6 @@ Phase 0 is proven, per PLAN.md 13, by hand-running against a throwaway `project.
 4. Kill `provision` mid-run, then `--resume`: it reuses the recorded ids and creates nothing twice.
 5. `verify compare` reports every field matching the local content.
 6. `bundle` then `deploy` produces a reachable share URL with a content hash in it.
-7. Re-run `update-directive` with no local change: it reports "already up to date" and makes no call.
-8. Point a second project with a different slug at the same account: its provision succeeds, and a mutating call against the first project's id is refused (PLAN.md 8).
+7. Re-run `update-prompts` with no local change: it reports "already up to date" and makes no call. Same for `update-capabilities` and `update-avatar`.
+8. `attach-tool` twice with the same tool: the second run finds the existing tool, does not create a second one, and leaves the prompts and capabilities untouched.
+9. Point a second project with a different slug at the same account: its provision succeeds, and a mutating call against the first project's id is refused (PLAN.md 8).

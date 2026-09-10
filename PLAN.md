@@ -120,14 +120,16 @@ These are the interfaces between pipeline stages.
 ```json
 {
   "slug": "my-deck",
-  "personaName": "Alex",
+  "personaName": "Nova",
   "productOrTopic": "One-line description of the deck's subject",
   "audience": "Who this is presented to",
   "tone": "confident, concise, no filler",
   "restrictedTopics": ["topics the agent should never discuss"],
   "totalSlides": 42,
   "chapters": [{ "title": "Introduction", "range": [1, 5] }],
-  "features": { "contactForm": true, "endSessionTool": true, "knowledgeBase": true },
+  "features": { "contactForm": true, "endSessionTool": true, "knowledgeBase": true, "followUpEmail": false },
+  "sessionMaxSeconds": 900,
+  "capabilities": { "avatar": "on", "use_knowledge_base": "on", "use_content_search": "on" },
   "avatar": { "source": "fresh" },
   "disclosure": { "text": "", "locale": "en" },
   "privacy": {
@@ -143,6 +145,9 @@ These are the interfaces between pipeline stages.
 Drives placeholder substitution into every generated prompt file, the tool names (derived from `slug`, never hardcoded), resource naming for collision avoidance (section 8), and generic client branding.
 
 - `avatar.source` is `"cloned"` or `"fresh"`, written by section 6.6. It drives the synthetic-content label in the client (section 9) so labelling is data-driven, not a judgment call at render time.
+- `capabilities` is a **partial override** on top of the engine's presenter default map. The engine expands it to the full 15-key set before every write, because Kaltura replaces the whole capability sub-dict on update rather than merging it. The appendix lists the keys, the defaults, and why a partial write silently drops siblings.
+- `sessionMaxSeconds` must agree with the duration the welcome-screen copy promises. The server accepts 1 to 3600. The bundle step compares the two and fails on a mismatch, because a session that ends before the promised time reads as a crash to the audience.
+- `features.followUpEmail` is off by default. Turning it on makes the agent collect contact details and email a session summary, which is a new purpose under section 10 and needs its own privacy-panel copy.
 - `disclosure.text` may be reworded or translated. When blank, the engine substitutes its built-in default string, so the disclosure cannot be removed by emptying the field.
 - `privacy.controllerName` and `privacy.controllerContact` must be non-empty before section 6.7 will produce a bundle.
 - Naming the persona after a real person pulls in the same consent requirement as cloning their voice (section 10), even when no cloning happens.
@@ -189,6 +194,16 @@ Two things risk becoming deck-specific *code* if built carelessly: topic-to-slid
 - caption map (auto-derived from `pronunciation-guide.md` at bundle time): `{ "spoken form": "display form" }`
 
 Both, along with the deck-specific section of `base-directive.md`, are rendered deterministically from `data/nav-rules.json`. One structured source of truth, several rendered outputs, so the routing data and the directive prose can never cite different slide numbers for the same topic.
+
+### The derived-content module
+
+One generic module in the project, `content.mjs`, is the only bridge between the data files above and the Kaltura payloads in section 6.6. It reads `project.json`, `prompts/*.md`, `data/slides/*.json`, and `data/nav-rules.json` at import time and exports every API constant: the base directive with placeholders substituted, the prompt-block array, the full capability map, each tool definition, the opening phrase, and the glossary.
+
+Every provisioning and update command imports from it and holds no content of its own. That matters for three reasons:
+
+- A prompt file edit reaches the live agent through one code path, so `provision` and any later `update-*` can never write different wording.
+- Derived values are computed once, not repeated. Total slide count comes from counting `data/slides/*.json`, not from a literal, so it cannot drift from the files on disk.
+- Every command is content-free, which is what keeps deck material out of `engine/` and therefore out of this repo.
 
 ### Bundle credential contract
 
@@ -246,14 +261,21 @@ A fixed order: navigation tool → KB category → KB upload → knowledge recor
 - After each of the nine steps succeeds, its id is written immediately to `.provisioning-state.json` (section 8), not only when the whole stage finishes. A retry reads this file and resumes from the first missing step, reusing recorded ids instead of re-creating them. On an unrecoverable failure mid-stage, the tool prints every id created so far.
 - **Credential handling.** `adminSecret` comes from the project's own `.env`, and the engine exchanges it for a short-lived Kaltura session key once at run start, then uses that session key for every subsequent call. This mirrors what the section 5 bundle contract already does, so the long-lived secret isn't the thing in flight on every request. The secret is never logged and is redacted from error output.
 - Names (KB category, tool, agent display name) come from `project.json`, never literals, and are namespaced by `project.json.slug` so two projects naturally produce differently-named resources on the same account (section 8).
-- **Avatar voice and visual.** Either clone from a voice or visual id the user supplies, or create fresh. The clone path is gated on a consent record that must already exist in the project repo (section 10); the engine refuses to run the avatar step without it. Either way, the engine writes `avatar.source` to `project.json` so the client knows whether to show a synthetic-content label.
+- **Capabilities are written in full, always.** The intellect carries a 15-key capability map. Kaltura replaces that sub-dict wholesale on update, so sending three keys turns the other twelve off. The engine expands `project.json.capabilities` against the platform default map and writes all 15 every time. The presenter needs `avatar`, `use_knowledge_base`, and `use_content_search` on. The appendix lists the keys, the ones that are off by default, the account-level flag that vetoes a per-request enable, and the roughly 24-hour cache that makes a late flip look like it did nothing.
+- **Avatar voice and visual.** Either clone from a voice or visual id the user supplies, or create fresh from an audio sample and a photo. The clone path and the fresh-from-sample path are both gated on a consent record that must already exist in the project repo (section 10); the engine refuses to run the avatar step without it, and passes the record's identifier to the platform's own consent field. Either way, the engine writes `avatar.source` to `project.json` so the client knows whether to show a synthetic-content label. **Creating a voice or visual is not idempotent:** each run mints a new catalog item and orphans the previous one, so the step is skipped whenever state already records an id, and a forced re-run reports what it orphaned.
+- **Persona identity is checked across three surfaces.** The name appears in the base directive, in the prompt blocks, and in the opening phrase. Changing one leaves the agent introducing itself by the old name, which is why they are written together from `project.json.personaName` and asserted equal after the write.
+- **Optional post-provision stage: follow-up email.** When `features.followUpEmail` is on, the engine also creates two session-lifecycle rules and a branded email template. This runs after step 9, is skipped by default, and is the only part of provisioning that touches a second Kaltura API. The appendix carries the contract.
 - Prompt caching and MCP are Anthropic-API-layer mechanisms and are out of scope here: the deployed agent runs on Kaltura's platform, which owns its own inference path.
+
+The update commands are the same nine steps addressed one at a time, and there are six of them rather than one per field: `update-prompts` (directive, glossary, prompt blocks, persona name), `update-capabilities`, `update-avatar` (opening phrase, voice, visual, motion), `update-agent` (display name, tags, session length), `attach-tool` (one generic command, any client tool), and `update-followup` (lifecycle rules and email template). All six share the read-compare-write-verify shape in the appendix, all six take `--dry-run`, and all six exit non-zero when the post-write read-back disagrees.
 
 ### 6.7 Bundle and deploy
 
 Inline the generated slide data and client-side prompt templates into one self-contained HTML bundle (per the credential contract in section 5, never a raw `.env` value). Upload the deck and the bundle as Kaltura entries under a filename or asset embedding a content hash or incrementing version, so a changed bundle is never served stale from a cache. Create or update a share short link. Everything is parameterized by `project.json`, never hardcoded branding or slide counts.
 
-The bundle step refuses to produce output when the AI-disclosure string would be absent, or when `privacy.controllerName` or `privacy.controllerContact` is empty.
+The bundle step refuses to produce output when the AI-disclosure string would be absent, when `privacy.controllerName` or `privacy.controllerContact` is empty, or when the session duration promised in the welcome copy exceeds `sessionMaxSeconds`.
+
+It also stamps a version constant into the bundle and refuses to deploy an unchanged one, so a cache-busting URL can never be minted for a bundle nobody rebuilt.
 
 ### 6.8 Testing and eval
 
@@ -319,6 +341,20 @@ Whether an AI avatar's live speech formally triggers 1.2.4 is genuinely unsettle
 
 **Privacy panel.** A "How this session handles your data" panel, linked from the welcome screen and reachable **before** the mic can be enabled, generated from `project.json.privacy` (section 10).
 
+### What the client must handle
+
+The live session emits roughly two dozen events, and a presenter that only listens for "connected" and "error" ships visibly broken. The generic client handles them in five groups, and the appendix lists the event names:
+
+| Group | What the client owes the audience |
+|---|---|
+| Startup | Separate video and audio elements, a widget token minted per session with a re-mint path, and a one-time click to start playback when the browser blocks autoplay. |
+| Speech | Show when the agent is speaking, when it was interrupted, and when a reply is pending. Captions come from the same text stream, so the caption toggle in section 9 has no separate server channel to depend on. |
+| Navigation | The slide-change tool call may arrive before the client is told the agent stopped speaking, so slide state follows the tool call, not the speech state. |
+| Health | Reconnect, capacity, and stalled-response events all need visible handling. A stalled reply is re-sent once with a resume instruction naming the current slide and forbidding navigation, so recovery does not jump the deck. |
+| Time | A warning before the session limit and a clean end at it, both worded from `sessionMaxSeconds` rather than a literal. |
+
+The engine also rewrites the SDK version constant into the bundle at build time, so a deployed page states which SDK it actually shipped with.
+
 ## 10. Transparency, consent, and audience data
 
 This section exists because three obligations attach to the *deployed* agent rather than to this repo, and the section 2 rule about zero customer data in the repo does not cover any of them.
@@ -344,6 +380,7 @@ The presenter takes live audience questions, which means personal data. Defaults
 - `reuseForEval` is `false`. Section 6.8 reads transcripts only from projects that set it to `true` explicitly, because reusing conversation data for eval or model improvement is a *new purpose* and needs its own basis, not the one that covered answering the question. The template `CLAUDE.md` tells the agent never to copy audience transcripts into the project repo.
 - The privacy panel (section 9) covers the GDPR Art 13 items: controller identity and contact, purposes and legal basis, recipients, retention period, and data-subject rights including withdrawal and the right to complain to a supervisory authority. Art 6(1) requires a basis; Art 5(1)(c) and 5(1)(e) require minimisation and storage limitation, which is why "store nothing" is the default rather than "store and offer a delete button".
 - Section 6.7 refuses to bundle when `controllerName` or `controllerContact` is empty.
+- **The follow-up email feature is off by default**, and it is the one feature that contradicts every default above. Turned on, the platform extracts the visitor's name, email, company, role, and phone from the conversation after it ends, and emails a summary to an address the project owner sets. That is collection, storage, and transmission of contact data, plus a purpose the audience did not come for. So it ships off, `features.followUpEmail` must be set explicitly, the checkpoint in section 6.5 shows the recipient address and the fields extracted, and turning it on requires its own privacy-panel paragraph naming the recipient and the retention period before section 6.7 will bundle.
 - Capturing a question is **not** automatically biometric processing. Voice data becomes special-category data under Art 9 only when processed to uniquely identify someone, which this does not do. Voice recordings are still hard to anonymise and question content can reveal special categories regardless, which is another reason not to keep them.
 - Section 3 should state which of Kaltura and the model vendor act as processors, so users know where they need a data-processing contract. Obtaining it is theirs to do.
 
@@ -351,7 +388,7 @@ The presenter takes live audience questions, which means personal data. Defaults
 
 `docs/transparency-and-consent.md`, referenced from sections 9 and 13, in four short parts:
 
-1. **What the tool does by default:** disclosure line, synthetic-content label when cloning, no audience capture, session-only transcripts, captions on.
+1. **What the tool does by default:** disclosure line, synthetic-content label when cloning, no audience capture, session-only transcripts, captions on, no contact collection and no follow-up email.
 2. **What you must decide:** lawful basis, retention, whether transcripts feed eval, who your processors are, and whether you are provider or deployer under the AI Act. That last one is genuinely fact-dependent for someone who scaffolds and deploys their own presenter, so the page tells users to work it out rather than asserting an answer.
 3. **Jurisdiction-labelled pointers,** one sentence and one link each, with thresholds where they exist: EU AI Act Art 50 (applies from 2 August 2026), GDPR, US state digital-replica laws, WCAG 2.2 AA, the model vendor's usage policy, and the California AI Transparency Act (operative 2 August 2026, but its duties attach above 1,000,000 monthly users, so ordinary users of this toolkit are almost certainly out of scope while their avatar or model vendor may not be).
 4. **A plain statement** that these are defaults, not compliance, that the toolkit gives no legal advice, and that obligations depend on where the user and their audience are.
@@ -386,14 +423,16 @@ The section 3 gate covers data leakage. These cover the rest, and they matter mo
 | Provenance metadata | Sign exported video with C2PA vs. rely on the vendor's Art 50(2) marking | Defer: no local video artifact exists to sign. The pipeline provisions a live avatar and ships a widget id. If a download or recording feature ever lands, sign with `@contentauth/c2pa-node` using the IPTC `trainedAlgorithmicMedia` source type, and note that a self-signed manifest proves nothing without a trusted certificate. |
 | Audience: already has a Kaltura account? | Assume yes vs. support first-timers | Decided (section 2): assume yes. |
 | Offline test coverage for engine control-flow | Mock/fixture Kaltura client vs. live sandbox suite only | Rely on the live sandbox suite (section 13) for now; add fixtures later only if control-flow bugs keep slipping through. |
+| Follow-up email after a session | Ship on, ship off, or leave out of v1 | **Ship off, built in Phase 2.** The platform surface exists and is worth exposing, but it collects contact data, so it stays behind an explicit flag and its own privacy copy (section 10). |
+| Which capabilities the presenter default map turns on | Minimal three vs. also web search and related files | **Minimal three:** avatar, knowledge base, content search. Web search reintroduces ungrounded claims the section 6.8 numeric check is built to catch, and related-files surfaces content the deck owner did not choose. Both stay available as overrides. |
 
 Deferred past v1, revisit in Phase 3: audio-rendered pronunciation verification and tone-fidelity scoring in 6.8. Real gaps, but consistent with the plan's manual-checkpoint-heavy early phases.
 
 ## 13. Phased roadmap
 
-- **Phase 0: Engine.** Build the Kaltura API scripts (`provision`, `deploy`, `bundle`, `verify`, `update-directive`) fully parameterized by `project.json` and `.env`, with no hardcoded names, ids, or paths, including the per-project `.provisioning-state.json` idempotency/resume logic, the live-account name-collision check (section 8), and the admin-secret-to-session-key exchange (section 6.6). Ship the generic client app with neutral branding, the disclosure line, and the accessibility defaults from section 9. Commit a lockfile. Write the root `CLAUDE.md` now, before any other contributor touches the repo, plus LICENSE and SECURITY.md. Pin Actions to SHAs and set workflow permissions from the first workflow. Proven by hand-running the engine against a minimal hand-written fixture (a throwaway `project.json`/`.env` and a few stub slide-data files), not the fictional demo project.
+- **Phase 0: Engine.** Build the Kaltura API commands (`provision`, `bundle`, `deploy`, `verify`, plus the six update commands in 6.6: `update-prompts`, `update-capabilities`, `update-avatar`, `update-agent`, `attach-tool`; `update-followup` waits for Phase 2) and the derived-content module they all import from (section 5), fully parameterized by `project.json` and `.env`, with no hardcoded names, ids, or paths, including the per-project `.provisioning-state.json` idempotency/resume logic, the live-account name-collision check (section 8), and the admin-secret-to-session-key exchange (section 6.6). Ship the generic client app with neutral branding, the disclosure line, the accessibility defaults from section 9, and handling for every event group in section 9's runtime table. Commit a lockfile. Write the root `CLAUDE.md` now, before any other contributor touches the repo, plus LICENSE and SECURITY.md. Pin Actions to SHAs and set workflow permissions from the first workflow. Proven by hand-running the engine against a minimal hand-written fixture (a throwaway `project.json`/`.env` and a few stub slide-data files), not the fictional demo project.
 - **Phase 1: Manual-assisted pipeline.** Add `templates/prompts/*.md`, `templates/project/CLAUDE.md`, the consent-record templates, `create-project.mjs` (installing the skill into `.claude/skills/`, writing `.template-version`, and the repo-root `.gitignore` plus the CI secret-and-path scan from section 3), `bin/check-template-update.mjs`, `bin/doctor.mjs`, the minimal `.claude-plugin/plugin.json`, and the fictional `demo/` project. Claude Code can already do sections 6.1 to 6.4 ad hoc in a fresh project repo using the templates as a guide; no dedicated skill yet, just documented steps. Add the regression suite driving provision → bundle → deploy → verify against `demo/` on a sandbox account, triggered by `workflow_dispatch` only (section 11), including the same-account collision test from section 8. Add CI checks that need no live account: a golden-output check on `demo/`'s ingestion and prompt-drafting output, the section 6.4 semantic lint, and a chunk-level retrieval eval over `demo/`'s KB files (synthetic Q&A, recall and precision) so a retrieval miss is distinguishable from a generation miss.
-- **Phase 2: The skill.** Write and test `SKILL.md` plus its `reference-*.md` files so the full pipeline runs from one instruction, with the credential preflight, the batched and capped question round, the human checkpoint and held-out question collection (6.5), the nav-rules lint, and the full eval pass (6.8: deterministic numeric traceability, reference-guided judge, adversarial turns, eval-run artifact) all built in.
+- **Phase 2: The skill.** Write and test `SKILL.md` plus its `reference-*.md` files so the full pipeline runs from one instruction, with the credential preflight, the batched and capped question round, the human checkpoint and held-out question collection (6.5), the nav-rules lint, the optional follow-up-email stage and its `update-followup` command with the privacy copy from section 10, and the full eval pass (6.8: deterministic numeric traceability, reference-guided judge, adversarial turns, eval-run artifact) all built in.
 - **Phase 3: Polish.** Native PPTX notes extraction, publish as a hosted Claude Code plugin, write `docs/transparency-and-consent.md` and public docs plus a short screen recording using the fictional demo project. Add the contributor files and SBOM release step from section 11. Revisit the deferred items in section 12 (audio pronunciation check, tone-fidelity eval, offline mock layer, C2PA if a download feature lands) if they've become worth the investment.
 
 ## Appendix: sources for the standards above
