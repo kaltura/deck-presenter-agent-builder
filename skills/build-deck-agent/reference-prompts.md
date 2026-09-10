@@ -52,7 +52,7 @@ Walk every file under `prompts/`. Most files already carry `{{PLACEHOLDER}}` tok
 - `restricted-topics.md`: `{{ADDITIONAL_RESTRICTED_TOPICS}}` — one line per entry in `project.json.restrictedTopics`, each with the reason and the redirect behavior (paired positive alternative, see below).
 - `target-audience.md`: `{{AUDIENCE_DESCRIPTION}}` and `{{ASSUMED_BACKGROUND}}` — from `project.json.audience`.
 - `glossary.md`: `{{ONE_LINE_DEFINITION}}` per harvested term (from the `terms` stage).
-- `pronunciation-guide.md`: already filled by the `terms` stage.
+- `pronunciation-guide.md`: already filled by the `terms` stage. A well-known name (a famous brand, person, or place) can resist a plain `TERM -> "how it sounds"` row: the model already "knows" the standard spelling and keeps writing that instead of the phonetic form, even after the row is right. If a live spot check still shows the old spelling, add a short paragraph right after the table stating the rule directly ("BRAND is spoken and captioned as three separate words: 'B and D'. Never write the character '&' for BRAND, in any sentence, in any language. Write 'B and D' instead, every single time, with no exceptions."), push with `engine/update-prompts.mjs`, and spot check again with a few different questions before trusting it.
 - `client/route-answers.md`: one `{{TOPIC_KEY}}` / `{{SLIDE_NUM}}` / `{{SUMMARY}}` block per `data/routes.json` entry.
 - `persona-name.md`, `opening-phrase.md`: from `project.json.personaName`. Keep the name consistent across both files and the base directive's own references to the presenter — a mismatch reads as the agent forgetting who it is.
 
