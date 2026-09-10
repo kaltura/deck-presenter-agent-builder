@@ -1,0 +1,15 @@
+{
+  "slide": 7,
+  "title": "Automation: closing the loop with valve control",
+  "category": "product",
+  "talking_points": [
+    "Canopy can connect directly to a farm's existing valve controllers.",
+    "When a field crosses its moisture threshold, Canopy can open or close the right valve automatically.",
+    "A team can also keep every decision manual and only use Canopy for visibility."
+  ],
+  "content": {
+    "headline": "Automatic where you want it, manual where you don't",
+    "bullets": ["Connects to existing valve controllers", "Threshold-based automatic watering", "Manual override always available"]
+  },
+  "narrator_guidance": "Close the How It Works chapter here. Make clear automation is optional, not required."
+}

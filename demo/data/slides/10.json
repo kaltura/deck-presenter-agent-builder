@@ -1,0 +1,15 @@
+{
+  "slide": 10,
+  "title": "Next steps",
+  "category": "closing",
+  "talking_points": [
+    "Thank the visitor for their time before closing.",
+    "Offer to take their contact details if they want a follow-up.",
+    "Invite one last question before ending the session."
+  ],
+  "content": {
+    "headline": "Ready to talk about your fields?",
+    "bullets": ["Leave your contact details for a follow-up", "Ask any last question", "This is the final slide of the demo deck"]
+  },
+  "narrator_guidance": "This is the last slide. Summarize in one sentence, then invite a final question instead of segueing forward."
+}

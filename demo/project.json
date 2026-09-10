@@ -1,0 +1,45 @@
+{
+  "slug": "canopy",
+  "personaName": "Wren",
+  "productName": "Canopy",
+  "productOrTopic": "Canopy, a precision irrigation platform for mid-size farms",
+  "companyName": "Cascade Fieldworks",
+  "language": "en",
+  "audience": "Farm operations managers and agronomy leads evaluating irrigation software",
+  "tone": "warm, plain-spoken, practical",
+  "restrictedTopics": [
+    "Specific soil-chemistry or fertilizer advice beyond what the deck covers",
+    "Guarantees about crop yield increases"
+  ],
+  "totalSlides": 10,
+  "chapters": [
+    { "title": "Introduction", "range": [1, 3] },
+    { "title": "How It Works", "range": [4, 7] },
+    { "title": "Results and Pricing", "range": [8, 10] }
+  ],
+  "features": {
+    "contactForm": true,
+    "endSessionTool": true,
+    "knowledgeBase": true,
+    "followUpEmail": false
+  },
+  "sessionMaxSeconds": 900,
+  "capabilities": {
+    "avatar": "on",
+    "use_knowledge_base": "on",
+    "use_content_search": "on"
+  },
+  "avatar": { "source": "fresh" },
+  "branding": {},
+  "disclosure": {
+    "text": "You're talking with Wren, an AI presenter for Canopy. Wren doesn't collect personal data unless you choose to share it through the contact form.",
+    "locale": "en"
+  },
+  "privacy": {
+    "controllerName": "Cascade Fieldworks",
+    "controllerContact": "privacy@example.com",
+    "transcriptRetention": "none",
+    "retentionDays": 0,
+    "reuseForEval": false
+  }
+}

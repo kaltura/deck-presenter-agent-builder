@@ -1,0 +1,53 @@
+{
+  "_comment": "Human-written eval questions, 2-3 per chapter, phrased the way a real audience would ask. See PLAN.md 6.5 and 6.8.",
+  "questions": [
+    {
+      "chapter": "Introduction",
+      "question": "What does Canopy actually do, in one sentence?",
+      "expected_slide": 3,
+      "reference_answer": "Canopy reads soil moisture and weather per field and tells the team where to water next, replacing calendar-based watering with a live picture of every block."
+    },
+    {
+      "chapter": "Introduction",
+      "question": "Why is watering on a calendar a problem?",
+      "expected_slide": 2,
+      "reference_answer": "A calendar guesses in both directions: some blocks get watered too early, wasting water, and others too late, which shows up as yield loss weeks after the fact."
+    },
+    {
+      "chapter": "How It Works",
+      "question": "What do the sensors actually measure?",
+      "expected_slide": 4,
+      "reference_answer": "Soil moisture, soil temperature, and soil salinity, reported from sensors placed in the ground at chosen points in each field."
+    },
+    {
+      "chapter": "How It Works",
+      "question": "Can Canopy automatically turn the water on and off, or does someone have to do it by hand?",
+      "expected_slide": 7,
+      "reference_answer": "It can connect to a farm's existing valve controllers and open or close the right valve automatically at a set moisture threshold, but a team can also keep every decision manual and use Canopy only for visibility."
+    },
+    {
+      "chapter": "How It Works",
+      "question": "How does the dashboard warn the team before there's a real problem?",
+      "expected_slide": 6,
+      "reference_answer": "A field turns amber before it turns red on the map, and alerts go to the team's phones, not just the dashboard, so there's time to act before stress shows."
+    },
+    {
+      "chapter": "Results and Pricing",
+      "question": "Is the Fernvale Orchards result real?",
+      "expected_slide": 8,
+      "reference_answer": "No. Fernvale Orchards and its result are invented for this demo to show what a results slide looks like, not a real customer or a real outcome."
+    },
+    {
+      "chapter": "Results and Pricing",
+      "question": "What are the pricing options?",
+      "expected_slide": 9,
+      "reference_answer": "A Per Field plan and a Whole Farm plan, both invented for this demo; the presenter should note the pricing isn't real."
+    },
+    {
+      "chapter": "Results and Pricing",
+      "question": "How do I get in touch after this?",
+      "expected_slide": 10,
+      "reference_answer": "The presenter should offer to take contact details through the contact form for a follow-up."
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "slide": 4,
+  "title": "How it works: sensors in the field",
+  "category": "architecture",
+  "talking_points": [
+    "Small solar-powered sensors sit in the ground at chosen points in each field.",
+    "Each sensor reports soil moisture, temperature, and salinity on a set interval.",
+    "One sensor cluster typically covers a few acres, depending on soil variation."
+  ],
+  "content": {
+    "headline": "Sensors report from the ground, not just the sky",
+    "bullets": ["Soil moisture", "Soil temperature", "Soil salinity"]
+  },
+  "narrator_guidance": "Start the How It Works chapter here. Keep this slide about the hardware only."
+}

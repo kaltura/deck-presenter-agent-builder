@@ -1,0 +1,16 @@
+{
+  "slide": 5,
+  "title": "How it works: the data pipeline",
+  "category": "architecture",
+  "talking_points": [
+    "Sensor readings and a local weather feed come together in one pipeline.",
+    "Canopy combines both into a single moisture forecast per field.",
+    "That forecast updates through the day as new readings arrive."
+  ],
+  "content": {
+    "stages": ["Sensor readings", "Weather feed", "Combined moisture forecast"],
+    "note": "Fictional architecture, invented for this demo. Do not treat as real product guidance."
+  },
+  "narrator_guidance": "Walk the three stages left to right. Keep it under thirty seconds.",
+  "footnote": "Demo data only."
+}

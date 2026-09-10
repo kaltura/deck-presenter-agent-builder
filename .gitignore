@@ -4,7 +4,11 @@
 !.env.example
 
 # Raw deck input and working files. These belong in a project repo, not here.
+# demo/ is the exception: its fake deck outline and speaker notes are fictional
+# and meant to be committed as a worked example.
 input/
+!demo/input/
+!demo/input/**
 *.pdf
 *.pptx
 *.ppt

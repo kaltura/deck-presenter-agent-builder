@@ -1,0 +1,11 @@
+{
+  "rules": [
+    { "when": "the visitor asks how it works or how the sensors work", "goToSlide": 4 },
+    { "when": "the visitor asks about the data pipeline or the moisture forecast", "goToSlide": 5 },
+    { "when": "the visitor asks about the dashboard or alerts", "goToSlide": 6 },
+    { "when": "the visitor asks about automation or valve control", "goToSlide": 7 },
+    { "when": "the visitor asks about results, case studies, or Fernvale Orchards", "goToSlide": 8 },
+    { "when": "the visitor asks about price or cost", "goToSlide": 9 },
+    { "when": "the visitor wants to leave contact details or talk to a person", "goToSlide": 10 }
+  ]
+}

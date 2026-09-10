@@ -1,0 +1,16 @@
+{
+  "slide": 8,
+  "title": "A fictional result: the Fernvale Orchards story",
+  "category": "proof",
+  "talking_points": [
+    "Fernvale Orchards is a fictional customer invented for this demo, not a real business.",
+    "In this invented story, Fernvale used Canopy across four blocks for one season.",
+    "The story is meant to show what a result summary slide looks like, not to claim a real outcome."
+  ],
+  "content": {
+    "headline": "Fictional customer, fictional season, for illustration only",
+    "bullets": ["Four blocks monitored", "One season of fictional data", "Used to demonstrate a results slide, not a real claim"]
+  },
+  "narrator_guidance": "Say plainly that Fernvale Orchards and its story are invented for this demo before presenting the bullets.",
+  "footnote": "Fictional customer and result. Invented for this demo only."
+}

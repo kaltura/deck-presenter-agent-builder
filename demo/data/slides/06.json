@@ -1,0 +1,15 @@
+{
+  "slide": 6,
+  "title": "The dashboard and alerts",
+  "category": "product",
+  "talking_points": [
+    "The dashboard shows every field on one map, colored by moisture level.",
+    "A field turns amber before it turns red, so the team has time to act.",
+    "Alerts go to the team's phones, not just the dashboard."
+  ],
+  "content": {
+    "headline": "See stress before it becomes damage",
+    "bullets": ["Map view by field", "Amber-before-red warnings", "Phone alerts for the operations team"]
+  },
+  "narrator_guidance": "Emphasize the early-warning point: amber before red."
+}

@@ -1,0 +1,15 @@
+{
+  "slide": 3,
+  "title": "What Canopy does",
+  "category": "overview",
+  "talking_points": [
+    "Canopy reads soil moisture and weather per field, then tells the team where to water next.",
+    "It replaces the calendar with a live picture of every block.",
+    "It works alongside the irrigation hardware a farm already has."
+  ],
+  "content": {
+    "headline": "One live picture of every field",
+    "bullets": ["Soil moisture sensors", "Weather-aware scheduling", "Works with existing irrigation hardware"]
+  },
+  "narrator_guidance": "Give the one-sentence summary of the whole product before moving on."
+}

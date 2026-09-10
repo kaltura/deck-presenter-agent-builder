@@ -1,0 +1,17 @@
+{
+  "slide": 9,
+  "title": "What it costs",
+  "category": "pricing",
+  "talking_points": [
+    "Pricing here is invented for this demo and does not describe a real product.",
+    "Two tiers keep the demo simple: a per-field plan and a whole-farm plan.",
+    "End by offering to answer questions or take contact details."
+  ],
+  "content": {
+    "tiers": [
+      { "name": "Per Field", "price": "40 per field per month", "coverage": "up to 20 fields" },
+      { "name": "Whole Farm", "price": "600 per month", "coverage": "unlimited fields, one farm" }
+    ]
+  },
+  "narrator_guidance": "State both tiers plainly. Do not push. Offer to take questions or contact details."
+}

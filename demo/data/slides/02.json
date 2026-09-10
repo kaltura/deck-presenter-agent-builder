@@ -1,0 +1,15 @@
+{
+  "slide": 2,
+  "title": "Guesswork costs water and yield",
+  "category": "problem",
+  "talking_points": [
+    "Most farms schedule irrigation on a calendar, not on what the soil actually needs.",
+    "That means some blocks get watered too early and others too late.",
+    "Both directions cost money: wasted water on one side, stressed plants on the other."
+  ],
+  "content": {
+    "headline": "Calendar-based watering guesses in both directions",
+    "bullets": ["Overwatering wastes water and power", "Underwatering shows up as yield loss weeks later", "Neither mistake is visible until it's too late to fix"]
+  },
+  "narrator_guidance": "Name the problem plainly. Do not use numbers or statistics that are not on the slide."
+}

@@ -1,0 +1,15 @@
+{
+  "slide": 1,
+  "title": "Canopy: know exactly when and where to water",
+  "category": "intro",
+  "talking_points": [
+    "Canopy is a fictional precision irrigation platform built for this demo.",
+    "It tells a farm operations team exactly when and where to water, field by field.",
+    "This whole deck describes a fictional product. No company, price, or result here is real."
+  ],
+  "content": {
+    "headline": "Water the right spot, at the right time, every time",
+    "bullets": ["Field-level soil moisture", "One dashboard for every block", "Alerts before stress shows"]
+  },
+  "narrator_guidance": "Open warmly. Say what Canopy does in one sentence, then invite a question."
+}
