@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Syncs the avatar's openingPhrase to match this project's own content.mjs.
- * voice/visual/motionControl are not yet driven by any project.json field
- * (PLAN.md 5 defines none), so this command never touches them.
+ * Syncs the avatar's openingPhrase to match this project's own content.mjs,
+ * and its voice/visual to match project.json avatar.templateName if set.
+ * motionControl is not yet driven by any project.json field, so this
+ * command never touches it.
  *
  * Usage: node engine/update-avatar.mjs --project <path> [--dry-run] [--yes] [--json]
  */
@@ -13,8 +14,6 @@ import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT,
 import { connect, adminKs } from './lib/kaltura.mjs';
 import { loadState, assertPartnerMatch } from './lib/state.mjs';
 import { loadContent } from './lib/load-content.mjs';
-
-const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 async function main() {
   const flags = parseFlags(process.argv.slice(2));
@@ -35,7 +34,23 @@ async function main() {
   const before = await mgmt.avatars.get(avatarId, ks);
 
   const desiredOpening = content.OPENING_PHRASE;
-  if (before.openingPhrase === desiredOpening) {
+
+  const templateName = project.avatar?.templateName;
+  let desiredVoiceId = before.voice?.id;
+  let desiredVisualId = before.visual?.id;
+  if (templateName) {
+    const templates = [];
+    for await (const t of mgmt.avatars.listTemplates(ks)) templates.push(t);
+    const template = templates.find((t) => t.name === templateName && t?.voice?.id && t?.face?.id);
+    if (!template) throw new Error(`avatar.templateName is "${templateName}" but no such avatar template exists.`);
+    desiredVoiceId = template.voice.id;
+    desiredVisualId = template.face.id;
+  }
+
+  const openingUpToDate = before.openingPhrase === desiredOpening;
+  const voiceUpToDate = before.voice?.id === desiredVoiceId;
+  const visualUpToDate = before.visual?.id === desiredVisualId;
+  if (openingUpToDate && voiceUpToDate && visualUpToDate) {
     progress(flags, 'Already up to date.');
     result(flags, { upToDate: true, avatarId });
     return;
@@ -49,19 +64,22 @@ async function main() {
   });
   for (const f of personaLint.findings) progress(flags, `[persona lint] ${f.severity}: ${f.message}`);
 
-  const planLines = [
-    `Update avatar for project "${state.slug}" (avatarId ${avatarId}):`,
-    `  openingPhrase: ${JSON.stringify(before.openingPhrase)} -> ${JSON.stringify(desiredOpening)}`,
-  ];
+  const planLines = [`Update avatar for project "${state.slug}" (avatarId ${avatarId}):`];
+  if (!openingUpToDate) planLines.push(`  openingPhrase: ${JSON.stringify(before.openingPhrase)} -> ${JSON.stringify(desiredOpening)}`);
+  if (!voiceUpToDate) planLines.push(`  voice: ${before.voice?.id} -> ${desiredVoiceId} (template "${templateName}")`);
+  if (!visualUpToDate) planLines.push(`  visual: ${before.visual?.id} -> ${desiredVisualId} (template "${templateName}")`);
   await confirmPlan(flags, planLines);
 
-  await mgmt.avatars.update({ id: avatarId, openingPhrase: desiredOpening }, ks);
+  const body = { id: avatarId, openingPhrase: desiredOpening };
+  if (!voiceUpToDate) body.voice = { id: desiredVoiceId };
+  if (!visualUpToDate) body.visual = { id: desiredVisualId };
+  await mgmt.avatars.update(body, ks);
 
   const after = await mgmt.avatars.get(avatarId, ks);
   const errors = [];
   if (after.openingPhrase !== desiredOpening) errors.push('openingPhrase did not apply');
-  if (!eq(after.voice || {}, before.voice || {})) errors.push('voice changed unexpectedly');
-  if (!eq(after.visual || {}, before.visual || {})) errors.push('visual changed unexpectedly');
+  if (after.voice?.id !== desiredVoiceId) errors.push('voice did not apply as expected');
+  if (after.visual?.id !== desiredVisualId) errors.push('visual did not apply as expected');
 
   if (errors.length) {
     progress(flags, `Verification FAILED: ${errors.join('; ')}`);
@@ -70,7 +88,7 @@ async function main() {
     return;
   }
 
-  progress(flags, 'Verified: openingPhrase updated, voice/visual untouched.');
+  progress(flags, 'Verified.');
   result(flags, { ok: true, avatarId });
 }
 

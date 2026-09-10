@@ -8,7 +8,7 @@ import { parseSections } from './prompt-format.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.5';
+const VERSION = '0.1.7';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -202,6 +202,8 @@ let currentRenderTask = null;
 let lastChatMessage = '';
 let avatarBubble = null;
 let avatarBubbleAt = 0;
+let lastBubbleRole = null;
+let lastBubbleText = '';
 const pendingTypedTexts = new Map();
 let pendingNavNudge = null;
 let resumeSlide = 0;
@@ -416,14 +418,19 @@ function goToSlide(n, reason = 'user') {
 
 // ── Chat log rendering ──
 function appendChatMessage(text, role) {
+  const rendered = toReadableText(stripAppText(text)).trim();
+  if (!rendered) return null;
+  if (role === lastBubbleRole && rendered === lastBubbleText) return null;
   const bubble = document.createElement('div');
   bubble.className = role === 'user' ? 'chat-msg chat-msg-user' : 'chat-msg chat-msg-avatar';
-  bubble.textContent = toReadableText(stripAppText(text));
+  bubble.textContent = rendered;
   el.chatLog.appendChild(bubble);
   el.chatLog.scrollTop = el.chatLog.scrollHeight;
   el.chatLogWrapper.classList.remove('idle');
   clearTimeout(chatLogIdleTimer);
   chatLogIdleTimer = setTimeout(() => el.chatLogWrapper.classList.add('idle'), CHAT_LOG_IDLE_MS);
+  lastBubbleRole = role;
+  lastBubbleText = rendered;
   return bubble;
 }
 
@@ -1036,12 +1043,13 @@ function bindEvents() {
 // ── Boot ──
 async function init() {
   applyBranding();
-  el.versionTag.textContent = `app v${VERSION} · SDK v${SDK_VERSION}`;
   el.btnDownloadPdf.href = PDF_URL;
 
   const debugMode = new URLSearchParams(window.location.search).has('debug');
   el.btnTranscript.classList.toggle('hidden', !debugMode);
   el.btnClearMemory.classList.toggle('hidden', !debugMode);
+  if (debugMode) el.versionTag.textContent = `app v${VERSION} · SDK v${SDK_VERSION}`;
+  el.versionTag.classList.toggle('hidden', !debugMode);
 
   try {
     await loadData();
@@ -1058,7 +1066,7 @@ async function init() {
   initChatLogDrag();
   updateCaptionOffset();
 
-  if (window.innerWidth < 1024 || window.innerHeight < 800) el.chatLogWrapper.classList.add('collapsed');
+  el.chatLogWrapper.classList.add('collapsed');
   setAutoPlayUI(autoPlayEnabled);
 
   await loadPDF();

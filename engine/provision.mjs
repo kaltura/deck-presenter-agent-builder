@@ -219,8 +219,11 @@ async function main() {
         // itself wants `visual: {id}`, so map face.id into it here.
         const templates = [];
         for await (const t of mgmt.avatars.listTemplates(ks)) templates.push(t);
-        const template = templates.find((t) => t?.voice?.id && t?.face?.id);
-        if (!template) throw new Error('avatars.listTemplates() returned no usable template with both voice and face ids.');
+        const usable = templates.filter((t) => t?.voice?.id && t?.face?.id);
+        if (!usable.length) throw new Error('avatars.listTemplates() returned no usable template with both voice and face ids.');
+        const templateName = project.avatar?.templateName;
+        const template = templateName ? usable.find((t) => t.name === templateName) : usable[0];
+        if (!template) throw new Error(`avatar.templateName is "${templateName}" but no such avatar template exists. Available: ${usable.map((t) => t.name).join(', ')}`);
         voice = { id: template.voice.id };
         visual = { id: template.face.id };
       }

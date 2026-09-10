@@ -416,6 +416,7 @@ button, input, textarea { font-family: inherit; }
   font-size: 10px;
   z-index: 31;
 }
+.ai-content-label[hidden] { display: none; }
 
 .caption-container {
   position: absolute;
