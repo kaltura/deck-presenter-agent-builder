@@ -8,7 +8,7 @@ import { parseSections } from './prompt-format.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.8';
+const VERSION = '0.1.9';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -22,7 +22,6 @@ const GOODBYE_GRACE_MS = 45000;
 const GOODBYE_PHRASE_RE = /\b(good ?bye|bye+!?|see ya|farewell|that'?s all|i'?m done|gotta go|talk later)\b/i;
 const APP_MARKERS = [NAV_NUDGE_PREFIX, RESUME_CUE_PREFIX, '[NAV HINT:', CONTACT_FORM_PREFIX];
 const CONTACT_COOLDOWN_MS = 60000;
-const CHAT_IDLE_MS = 12000;
 const CHAT_LOG_IDLE_MS = 12000;
 const TYPED_ECHO_WINDOW_MS = 60000;
 
@@ -206,7 +205,6 @@ let avatarBubble = null;
 let avatarBubbleAt = 0;
 let lastBubbleRole = null;
 let lastBubbleText = '';
-const pendingTypedTexts = new Map();
 let pendingNavNudge = null;
 let resumeSlide = 0;
 let pendingResume = 0;
@@ -218,7 +216,6 @@ let goodbyeGraceTimer = null;
 let deckPausedAfterGoodbye = false;
 let contactModalOpen = false;
 let contactSubmitted = false;
-let chatIdleTimer = null;
 let chatLogIdleTimer = null;
 let pageUnloading = false;
 
@@ -357,25 +354,9 @@ function sendTyped(text) {
   rememberTyped(trimmed);
   const hint = routeHint(trimmed);
   const payload = hint ? `${trimmed}\n${hint}` : trimmed;
-  pendingTypedTexts.set(normalizeTyped(trimmed), { text: trimmed, at: Date.now(), tries: 0 });
   appendChatMessage(trimmed, 'user');
   speakInterrupting(payload);
   markUserInteraction();
-  resetChatIdleTimer();
-}
-function resendTyped(entry) {
-  entry.tries += 1;
-  speakInterrupting(entry.text);
-}
-function resendIfStalled() {
-  const now = Date.now();
-  for (const entry of pendingTypedTexts.values()) {
-    if (now - entry.at > CHAT_IDLE_MS && entry.tries < 1) resendTyped(entry);
-  }
-}
-function resetChatIdleTimer() {
-  clearTimeout(chatIdleTimer);
-  chatIdleTimer = setTimeout(resendIfStalled, CHAT_IDLE_MS);
 }
 // KalturaAvatarSession has no sendText(): typed/nudge text goes through speak(),
 // and a mid-utterance send needs interrupt() first or the server queues it behind
@@ -920,13 +901,13 @@ function registerSessionEvents(sess) {
     }
   });
 
-  sess.on('avatarStartTalking', () => { avatarSpeaking = true; el.avatarPip.classList.add('thinking'); pendingTypedTexts.clear(); });
+  sess.on('avatarStartTalking', () => { avatarSpeaking = true; el.avatarPip.classList.add('thinking'); });
   sess.on('avatarStopTalking', () => { avatarSpeaking = false; el.avatarPip.classList.remove('thinking'); });
   sess.on('interrupted', () => { avatarSpeaking = false; });
   sess.on('transcript', ({ type, text }) => {
     if (type === 'partial' || !text) return;
     if (type === 'user') {
-      if (consumeTypedEcho(text)) { pendingTypedTexts.clear(); return; }
+      if (consumeTypedEcho(text)) return;
       appendChatMessage(text, 'user');
       markUserInteraction();
       if (TOOL_NAMES.endSession && GOODBYE_PHRASE_RE.test(text)) handleGoodbye();
