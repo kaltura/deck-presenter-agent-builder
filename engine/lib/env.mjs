@@ -34,7 +34,7 @@ export function loadCredentials(projectRoot) {
 
   const partnerId = get('KALTURA_PARTNER_ID');
   const adminSecret = get('KALTURA_ADMIN_SECRET');
-  const serviceUrl = get('KALTURA_SERVICE_URL') || 'https://cdnapisec.kaltura.com';
+  const serviceUrl = get('KALTURA_SERVICE_URL') || 'https://cdnapisec.kaltura.com/api_v3';
   const widgetId = get('KALTURA_WIDGET_ID') || '';
   const messagingUrl = get('KALTURA_MESSAGING_URL') || '';
 

@@ -21,10 +21,11 @@ export function messagingBaseUrl(creds) {
  * The classic Messaging API needs a classic type-2 KS, not the agentic
  * Management SDK's admin token — the two are different token formats on
  * different hosts. Minted directly against api_v3, same as any legacy
- * Kaltura client.
+ * Kaltura client. `serviceUrl` is the same api_v3 base engine/lib/kaltura.mjs
+ * passes as ovpUrl (it already ends in /api_v3), not just a bare host.
  */
 export async function mintClassicKs(partnerId, adminSecret, serviceUrl) {
-  const base = serviceUrl || 'https://cdnapisec.kaltura.com';
+  const base = serviceUrl || 'https://cdnapisec.kaltura.com/api_v3';
   const form = new URLSearchParams({
     partnerId: String(partnerId),
     secret: adminSecret,
@@ -32,7 +33,7 @@ export async function mintClassicKs(partnerId, adminSecret, serviceUrl) {
     privileges: 'disableentitlement',
     format: '1',
   });
-  const resp = await fetch(`${base}/api_v3/service/session/action/start`, { method: 'POST', body: form });
+  const resp = await fetch(`${base}/service/session/action/start`, { method: 'POST', body: form });
   const text = (await resp.text()).trim().replace(/^"|"$/g, '');
   if (!text || text.length < 50 || text.startsWith('<') || text.startsWith('{')) {
     throw new Error(`Failed to mint a classic session key: ${text.slice(0, 200)}`);
