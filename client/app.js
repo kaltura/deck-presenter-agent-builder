@@ -8,7 +8,7 @@ import { parseSections } from './prompt-format.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.10';
+const VERSION = '0.1.12';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -917,7 +917,15 @@ function registerSessionEvents(sess) {
   sess.on('transcript', ({ type, text }) => {
     if (type === 'partial' || !text) return;
     if (type === 'user') {
-      if (consumeTypedEcho(text)) return;
+      // The SDK can batch a typed question together with a subsequent
+      // app-injected speak() (a nav nudge, resume cue, etc.) into one
+      // combined "user" turn. That combined text won't match the plain
+      // typed-echo key, so check for an app marker too: any app-generated
+      // instruction text was never real audience input and must not
+      // render as a chat bubble, whether it arrives alone or appended to
+      // text the local echo in sendTyped() already displayed.
+      const hasAppMarker = APP_MARKERS.some((marker) => text.includes(marker));
+      if (hasAppMarker || consumeTypedEcho(text)) return;
       appendChatMessage(text, 'user');
       markUserInteraction();
       if (TOOL_NAMES.endSession && GOODBYE_PHRASE_RE.test(text)) handleGoodbye();
