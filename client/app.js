@@ -352,13 +352,13 @@ function sendTyped(text) {
   const payload = hint ? `${trimmed}\n${hint}` : trimmed;
   pendingTypedTexts.set(normalizeTyped(trimmed), { text: trimmed, at: Date.now(), tries: 0 });
   appendChatMessage(trimmed, 'user');
-  session?.sendText(payload);
+  speakInterrupting(payload);
   markUserInteraction();
   resetChatIdleTimer();
 }
 function resendTyped(entry) {
   entry.tries += 1;
-  session?.sendText(entry.text);
+  speakInterrupting(entry.text);
 }
 function resendIfStalled() {
   const now = Date.now();
@@ -370,8 +370,19 @@ function resetChatIdleTimer() {
   clearTimeout(chatIdleTimer);
   chatIdleTimer = setTimeout(resendIfStalled, CHAT_IDLE_MS);
 }
+// KalturaAvatarSession has no sendText(): typed/nudge text goes through speak(),
+// and a mid-utterance send needs interrupt() first or the server queues it behind
+// the avatar's current turn instead of running it now.
 function speakInterrupting(text) {
-  session?.sendText(text);
+  if (!session || sessionEnded) return;
+  const send = () => { if (session && !sessionEnded) session.speak(text); };
+  if (!(session.speaking || avatarSpeaking)) { send(); return; }
+  let done = false;
+  let off = () => {};
+  const fire = () => { if (done) return; done = true; off(); send(); };
+  off = session.on('interrupted', fire);
+  try { session.interrupt(); } catch { /* not connected: fall through to the timer */ }
+  setTimeout(fire, 800);
 }
 
 // ── Navigation ──
