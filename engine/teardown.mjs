@@ -106,6 +106,14 @@ async function main() {
       writeState(projectRoot, state);
       continue;
     }
+    if (key === 'widgetId') {
+      // No delete call exists for a widget id; it is dropped when the agent is deleted.
+      progress(flags, `[${key}] no delete call for a widget id; it is dropped with the agent.`);
+      deleted.push({ key, id: step.value, droppedWithAgent: true });
+      delete state.steps[key];
+      writeState(projectRoot, state);
+      continue;
+    }
     const del = DELETERS[key];
     try {
       progress(flags, `[${key}] deleting ${step.value}...`);

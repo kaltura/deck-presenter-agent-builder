@@ -8,7 +8,7 @@ import { parseSections } from './prompt-format.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.7';
+const VERSION = '0.1.8';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -158,6 +158,8 @@ const el = {
 
   btnCc: document.getElementById('btn-cc'),
   btnMute: document.getElementById('btn-mute'),
+  iconUnmuted: document.getElementById('icon-unmuted'),
+  iconMuted: document.getElementById('icon-muted'),
 
   transcriptPanel: document.getElementById('transcript-panel'),
   transcriptContent: document.getElementById('transcript-content'),
@@ -918,13 +920,13 @@ function registerSessionEvents(sess) {
     }
   });
 
-  sess.on('avatarStartTalking', () => { avatarSpeaking = true; el.avatarPip.classList.add('thinking'); });
+  sess.on('avatarStartTalking', () => { avatarSpeaking = true; el.avatarPip.classList.add('thinking'); pendingTypedTexts.clear(); });
   sess.on('avatarStopTalking', () => { avatarSpeaking = false; el.avatarPip.classList.remove('thinking'); });
   sess.on('interrupted', () => { avatarSpeaking = false; });
   sess.on('transcript', ({ type, text }) => {
     if (type === 'partial' || !text) return;
     if (type === 'user') {
-      if (consumeTypedEcho(text)) return;
+      if (consumeTypedEcho(text)) { pendingTypedTexts.clear(); return; }
       appendChatMessage(text, 'user');
       markUserInteraction();
       if (TOOL_NAMES.endSession && GOODBYE_PHRASE_RE.test(text)) handleGoodbye();
@@ -1008,6 +1010,9 @@ function bindEvents() {
     if (micPausedForForm) return;
     micMuted = !micMuted;
     el.btnMute.setAttribute('aria-pressed', String(micMuted));
+    el.btnMute.setAttribute('aria-label', micMuted ? 'Unmute avatar audio' : 'Mute avatar audio');
+    el.iconUnmuted.classList.toggle('hidden', micMuted);
+    el.iconMuted.classList.toggle('hidden', !micMuted);
     const audioEl = document.querySelector('audio');
     if (audioEl) audioEl.muted = micMuted;
   });
