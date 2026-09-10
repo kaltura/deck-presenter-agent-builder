@@ -8,7 +8,7 @@ import { parseSections } from './prompt-format.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.2';
+const VERSION = '0.1.3';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -122,6 +122,7 @@ const el = {
   btnTocClose: document.getElementById('btn-toc-close'),
 
   presentationContainer: document.getElementById('presentation-container'),
+  slideWrapper: document.getElementById('slide-wrapper'),
   pdfCanvas: document.getElementById('pdf-canvas'),
   annotationLayer: document.getElementById('annotation-layer'),
 
@@ -146,7 +147,6 @@ const el = {
   progressFill: document.getElementById('progress-fill'),
   slideJumpInput: document.getElementById('slide-jump-input'),
   slideCounter: document.getElementById('slide-counter'),
-  btnPause: document.getElementById('btn-pause'),
 
   autoplayControl: document.getElementById('autoplay-control'),
   btnAutoplayToggle: document.getElementById('btn-autoplay-toggle'),
@@ -472,20 +472,44 @@ async function loadPDF() {
 async function renderPage(n) {
   if (!pdfDoc) return;
   const generation = ++renderGeneration;
-  if (currentRenderTask) currentRenderTask.cancel();
+  if (currentRenderTask) {
+    try { currentRenderTask.cancel(); } catch { /* already done */ }
+    // cancel() doesn't settle task.promise synchronously — starting a new render
+    // on the same canvas before the old one settles can leave it hung forever.
+    await currentRenderTask.promise.catch(() => {});
+  }
+  if (generation !== renderGeneration) return;
   try {
     const page = await pdfDoc.getPage(Math.min(n, pdfDoc.numPages));
     if (generation !== renderGeneration) return;
-    const viewport = page.getViewport({ scale: 1.5 });
-    el.pdfCanvas.width = viewport.width;
-    el.pdfCanvas.height = viewport.height;
+    const unscaled = page.getViewport({ scale: 1 });
+    // Measure the outer container, not slideWrapper: slideWrapper is inline-block and
+    // sized BY its own canvas child, so measuring it here would be circular.
+    const containerWidth = el.presentationContainer.clientWidth || 1280;
+    const containerHeight = el.presentationContainer.clientHeight || 720;
+    const scale = Math.min(containerWidth / unscaled.width, containerHeight / unscaled.height);
+    const viewport = page.getViewport({ scale });
+    const dpr = window.devicePixelRatio || 1;
+    el.pdfCanvas.width = Math.floor(viewport.width * dpr);
+    el.pdfCanvas.height = Math.floor(viewport.height * dpr);
+    el.pdfCanvas.style.width = `${Math.floor(viewport.width)}px`;
+    el.pdfCanvas.style.height = `${Math.floor(viewport.height)}px`;
+    el.slideWrapper.style.setProperty('--slide-h', `${Math.floor(viewport.height)}px`);
+    updateCaptionOffset();
     const ctx = el.pdfCanvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     currentRenderTask = page.render({ canvasContext: ctx, viewport });
     await currentRenderTask.promise;
   } catch (err) {
     if (err?.name !== 'RenderingCancelledException') addDebugEntry(`Render failed: ${err.message}`);
   }
 }
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+new ResizeObserver(debounce(() => renderPage(currentSlideNum), 100)).observe(el.presentationContainer);
 
 // ── Contact form ──
 function openContactModal(reason) {
@@ -612,14 +636,18 @@ function setAutoPlayUI(enabled) {
 }
 
 function togglePause() {
+  if (!session) return;
   isPaused = !isPaused;
   el.avatarPauseOverlay.classList.toggle('hidden', !isPaused);
-  el.btnPause.setAttribute('aria-pressed', String(isPaused));
+  el.avatarPip.classList.toggle('paused', isPaused);
+  el.avatarPip.setAttribute('aria-pressed', String(isPaused));
   if (isPaused) {
     cancelAutoPlay();
-    session?.pause?.();
+    session.pause?.();
   } else {
-    session?.resume?.();
+    session.resume?.();
+    presenter?.refreshContext();
+    speakInterrupting(`${RESUME_CUE_PREFIX} The viewer has resumed — briefly continue where you left off.`);
     scheduleAutoPlay();
   }
 }
@@ -627,11 +655,16 @@ function togglePause() {
 // ── Draggable avatar pip / chat log ──
 function initAvatarDrag() {
   let dragging = false;
+  let didDrag = false;
+  let startX = 0;
+  let startY = 0;
   let offsetX = 0;
   let offsetY = 0;
   el.avatarPip.addEventListener('pointerdown', (ev) => {
     dragging = true;
-    el.avatarPip.classList.add('dragging');
+    didDrag = false;
+    startX = ev.clientX;
+    startY = ev.clientY;
     const rect = el.avatarPip.getBoundingClientRect();
     offsetX = ev.clientX - rect.left;
     offsetY = ev.clientY - rect.top;
@@ -639,30 +672,39 @@ function initAvatarDrag() {
   });
   el.avatarPip.addEventListener('pointermove', (ev) => {
     if (!dragging) return;
-    const parent = el.presentationContainer.getBoundingClientRect();
+    if (!didDrag && (Math.abs(ev.clientX - startX) > 4 || Math.abs(ev.clientY - startY) > 4)) {
+      didDrag = true;
+      el.avatarPip.classList.add('dragging');
+    }
+    if (!didDrag) return;
+    const parent = el.slideWrapper.getBoundingClientRect();
     el.avatarPip.style.left = `${ev.clientX - parent.left - offsetX}px`;
     el.avatarPip.style.top = `${ev.clientY - parent.top - offsetY}px`;
     el.avatarPip.style.right = 'auto';
     el.avatarPip.style.bottom = 'auto';
   });
   el.avatarPip.addEventListener('pointerup', () => {
+    if (dragging && !didDrag) togglePause();
     dragging = false;
     el.avatarPip.classList.remove('dragging');
+  });
+  el.avatarPip.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); togglePause(); }
   });
 }
 
 function clampChatLogWrapperPosition() {
   const rect = el.chatLogWrapper.getBoundingClientRect();
-  const parent = el.presentationContainer.getBoundingClientRect();
+  const parent = el.slideWrapper.getBoundingClientRect();
   if (rect.right > parent.right) el.chatLogWrapper.style.left = `${parent.width - rect.width - 8}px`;
   if (rect.bottom > parent.bottom) el.chatLogWrapper.style.top = `${parent.height - rect.height - 8}px`;
 }
 
 function updateCaptionOffset() {
   const pipRect = el.avatarPip.getBoundingClientRect();
-  const containerRect = el.presentationContainer.getBoundingClientRect();
+  const containerRect = el.slideWrapper.getBoundingClientRect();
   const bottomGap = containerRect.bottom - pipRect.top;
-  document.documentElement.style.setProperty('--caption-bottom', `${Math.max(84, bottomGap + 12)}px`);
+  el.slideWrapper.style.setProperty('--caption-bottom', `${Math.max(84, bottomGap + 12)}px`);
 }
 
 function initChatLogDrag() {
@@ -670,7 +712,7 @@ function initChatLogDrag() {
   let offsetX = 0;
   let offsetY = 0;
   el.chatLogWrapper.addEventListener('pointerdown', (ev) => {
-    if (ev.target.closest('.chat-form') || ev.target.closest('.chat-log')) return;
+    if (ev.target.closest('.chat-log')) return;
     dragging = true;
     const rect = el.chatLogWrapper.getBoundingClientRect();
     offsetX = ev.clientX - rect.left;
@@ -679,7 +721,7 @@ function initChatLogDrag() {
   });
   el.chatLogWrapper.addEventListener('pointermove', (ev) => {
     if (!dragging) return;
-    const parent = el.presentationContainer.getBoundingClientRect();
+    const parent = el.slideWrapper.getBoundingClientRect();
     el.chatLogWrapper.style.left = `${ev.clientX - parent.left - offsetX}px`;
     el.chatLogWrapper.style.top = `${ev.clientY - parent.top - offsetY}px`;
     el.chatLogWrapper.style.bottom = 'auto';
@@ -914,7 +956,6 @@ function bindEvents() {
     if (Number.isInteger(n)) { markUserInteraction(); goToSlide(n, 'jump'); }
   });
 
-  el.btnPause.addEventListener('click', togglePause);
   el.btnAutoplayToggle.addEventListener('click', () => setAutoPlayUI(!autoPlayEnabled));
 
   el.btnCc.addEventListener('click', () => {
@@ -953,7 +994,7 @@ function bindEvents() {
     if (ev.key === 'c' || ev.key === 'C') el.btnCc.click();
     if (ev.key === 'ArrowRight') el.btnNext.click();
     if (ev.key === 'ArrowLeft') el.btnPrev.click();
-    if (ev.key === ' ') { ev.preventDefault(); el.btnPause.click(); }
+    if (ev.key === ' ') { ev.preventDefault(); togglePause(); }
   });
 
   window.addEventListener('resize', clampChatLogWrapperPosition);

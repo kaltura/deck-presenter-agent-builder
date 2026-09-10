@@ -116,41 +116,37 @@
 
     <main class="presentation-wrapper">
       <div id="presentation-container" class="presentation-container">
-        <canvas id="pdf-canvas"></canvas>
-        <div id="annotation-layer" class="annotation-layer"></div>
+        <div id="slide-wrapper" class="slide-wrapper">
+          <canvas id="pdf-canvas"></canvas>
+          <div id="annotation-layer" class="annotation-layer"></div>
 
-        <div id="avatar-pip" class="avatar-pip">
-          <div id="avatar-loading" class="avatar-pip-overlay">
-            <span class="spinner" aria-hidden="true"></span>
-            <span class="sr-only">Connecting to the avatar&hellip;</span>
+          <div id="avatar-pip" class="avatar-pip" role="button" tabindex="0" aria-label="Pause or resume the avatar">
+            <div id="avatar-loading" class="avatar-loading">
+              <span class="avatar-loading-spinner" aria-hidden="true"></span>
+              <span class="sr-only">Connecting to the avatar&hellip;</span>
+            </div>
+            <div id="avatar-pause-overlay" class="avatar-pause-overlay hidden">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+            </div>
+            <div id="ai-content-label" class="ai-content-label" hidden>
+              <svg viewBox="0 0 20 20" width="16" height="16" role="img" aria-label="AI-generated content">
+                <rect x="0.5" y="0.5" width="19" height="19" rx="5" fill="#111827" stroke="#9ca3af" stroke-width="1"></rect>
+                <text x="10" y="13.5" font-family="system-ui, sans-serif" font-size="8" font-weight="700" fill="#f3f4f6" text-anchor="middle">AI</text>
+                <path d="M15.2 3.6l0.5 1.3 1.3 0.5-1.3 0.5-0.5 1.3-0.5-1.3-1.3-0.5 1.3-0.5z" fill="#9ca3af"></path>
+              </svg>
+              <span>AI-generated content</span>
+            </div>
           </div>
-          <div id="avatar-pause-overlay" class="avatar-pip-overlay hidden">
-            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+
+          <div id="caption-container" class="caption-container hidden" aria-live="polite">
+            <p id="caption-text" class="caption-text"></p>
           </div>
-          <div id="ai-content-label" class="ai-content-label" hidden>
-            <svg viewBox="0 0 20 20" width="16" height="16" role="img" aria-label="AI-generated content">
-              <rect x="0.5" y="0.5" width="19" height="19" rx="5" fill="#111827" stroke="#9ca3af" stroke-width="1"></rect>
-              <text x="10" y="13.5" font-family="system-ui, sans-serif" font-size="8" font-weight="700" fill="#f3f4f6" text-anchor="middle">AI</text>
-              <path d="M15.2 3.6l0.5 1.3 1.3 0.5-1.3 0.5-0.5 1.3-0.5-1.3-1.3-0.5 1.3-0.5z" fill="#9ca3af"></path>
-            </svg>
-            <span>AI-generated content</span>
+
+          <div id="slide-badge" class="slide-badge"></div>
+
+          <div id="chat-log-wrapper" class="chat-log-wrapper">
+            <div id="chat-log" class="chat-log" aria-live="polite"></div>
           </div>
-        </div>
-
-        <div id="caption-container" class="caption-container hidden" aria-live="polite">
-          <p id="caption-text" class="caption-text"></p>
-        </div>
-
-        <div id="slide-badge" class="slide-badge"></div>
-
-        <div id="chat-log-wrapper" class="chat-log-wrapper">
-          <div id="chat-log" class="chat-log" aria-live="polite"></div>
-          <form id="chat-form" class="chat-form">
-            <input id="chat-input" class="chat-input" type="text" placeholder="Type a question&hellip;" aria-label="Type a question" autocomplete="off">
-            <button class="btn btn-primary btn-send" type="submit" aria-label="Send">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg>
-            </button>
-          </form>
         </div>
       </div>
 
@@ -158,44 +154,54 @@
         <button id="btn-toc-toggle" class="btn btn-icon" type="button" aria-label="Open table of contents">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <button id="btn-prev" class="btn btn-icon" type="button" aria-label="Previous slide">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
-        </button>
 
-        <div class="progress-wrap">
-          <div id="progress-bar" class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
-          <label class="slide-jump-label" for="slide-jump-input">
-            <input id="slide-jump-input" class="slide-jump-input" type="number" min="1" value="1" aria-label="Jump to slide number">
-            <span id="slide-counter" class="slide-counter">/ 1</span>
-          </label>
-        </div>
-
-        <button id="btn-next" class="btn btn-icon" type="button" aria-label="Next slide">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-
-        <button id="btn-pause" class="btn btn-icon" type="button" aria-label="Pause avatar">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
-        </button>
-
-        <div id="autoplay-control" class="autoplay-control">
-          <button id="btn-autoplay-toggle" class="btn btn-icon" type="button" aria-label="Toggle autoplay">
-            <svg id="autoplay-ring" class="autoplay-ring" viewBox="0 0 56 56" width="28" height="28">
-              <circle cx="28" cy="28" r="25" fill="none" stroke="var(--color-border)" stroke-width="3"></circle>
-              <circle id="autoplay-ring-progress" cx="28" cy="28" r="25" fill="none" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="157" stroke-dashoffset="157" transform="rotate(-90 28 28)"></circle>
-            </svg>
-            <span id="autoplay-digits" class="autoplay-digits"></span>
+        <div class="controls-nav">
+          <button id="btn-prev" class="btn btn-icon" type="button" aria-label="Previous slide">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
           </button>
-          <span id="autoplay-status" class="sr-only" role="status" aria-live="polite"></span>
+
+          <div class="slide-progress">
+            <div id="progress-bar" class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+            <label class="slide-jump-label" for="slide-jump-input">
+              <input id="slide-jump-input" class="slide-jump-input" type="number" min="1" value="1" aria-label="Jump to slide number">
+              <span id="slide-counter" class="slide-counter">/ 1</span>
+            </label>
+          </div>
+
+          <div class="btn-nav-wrap">
+            <button id="btn-next" class="btn btn-icon" type="button" aria-label="Next slide">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+          </div>
         </div>
 
-        <button id="btn-cc" class="btn btn-icon" type="button" aria-pressed="false" aria-label="Toggle captions">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 10h2v4H8zM14 10h2v4h-2z"/></svg>
-        </button>
-        <button id="btn-mute" class="btn btn-icon" type="button" aria-pressed="false" aria-label="Mute avatar audio">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9v6h4l6 5V4l-6 5H4z"/></svg>
-        </button>
+        <div class="controls-actions">
+          <div id="autoplay-control" class="autoplay-control">
+            <button id="btn-autoplay-toggle" class="btn btn-icon" type="button" aria-label="Toggle autoplay">
+              <svg id="autoplay-ring" class="autoplay-ring" viewBox="0 0 56 56" width="28" height="28">
+                <circle cx="28" cy="28" r="25" fill="none" stroke="var(--color-border)" stroke-width="3"></circle>
+                <circle id="autoplay-ring-progress" cx="28" cy="28" r="25" fill="none" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="157" stroke-dashoffset="157" transform="rotate(-90 28 28)"></circle>
+              </svg>
+              <span id="autoplay-digits" class="autoplay-digits"></span>
+            </button>
+            <span id="autoplay-status" class="sr-only" role="status" aria-live="polite"></span>
+          </div>
+
+          <button id="btn-cc" class="btn btn-icon" type="button" aria-pressed="false" aria-label="Toggle captions">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 10h2v4H8zM14 10h2v4h-2z"/></svg>
+          </button>
+          <button id="btn-mute" class="btn btn-icon" type="button" aria-pressed="false" aria-label="Mute avatar audio">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9v6h4l6 5V4l-6 5H4z"/></svg>
+          </button>
+        </div>
       </div>
+
+      <form id="chat-form" class="chat-bar">
+        <input id="chat-input" class="chat-input" type="text" placeholder="Type a question&hellip;" aria-label="Type a question" autocomplete="off">
+        <button class="btn-send" type="submit" aria-label="Send">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg>
+        </button>
+      </form>
     </main>
 
     <aside id="transcript-panel" class="transcript-panel hidden" aria-label="Debug transcript">
