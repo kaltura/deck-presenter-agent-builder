@@ -311,7 +311,7 @@ One gitignored file per project, `.provisioning-state.json`, does two jobs:
 1. **This project's own idempotency.** Populated incrementally, one id per provisioning sub-step, as section 6.6 runs. Before creating any resource, the engine checks this file: if a step already has a recorded id, it updates in place or skips instead of creating a duplicate. A run that fails partway resumes from the first missing step.
 2. **Cross-project collision avoidance, without shared state.** Resource names are namespaced by `project.json.slug` (section 6.6), so two projects only risk colliding if they share a slug or someone hand-edits `.env` to point at another project's ids. Before creating a named resource, the engine also queries the live Kaltura account for an existing resource with that generated name; if one exists and isn't recorded in this project's own state file, it refuses with a clear "already exists, owned elsewhere" error instead of overwriting it. This needs no registry, no cross-repo file reads, and no shared filesystem convention, consistent with section 12's "one `.env` per project, no shared state" decision.
 
-The file also records the hash of each consent record used (section 10), so a consent file edited after provisioning is visible rather than silent.
+Each recorded id carries an `origin` of `created` or `adopted`, set from what the call that produced it actually did, and the file records the `partnerId` it was written against. Section 8.1 depends on both. The file also records the hash of each consent record used (section 10), so a consent file edited after provisioning is visible rather than silent.
 
 This directly backs the section 2 non-negotiable that a project must never collide with another project's resources on the same account, and is covered by an explicit test in the Phase 1 regression suite (section 13): two demo-derived projects pointed at one sandbox account, where a mutating call from one against the other's id is refused while a call against its own id succeeds.
 
@@ -321,12 +321,16 @@ This directly backs the section 2 non-negotiable that a project must never colli
 
 It is a separate command, never a flag on `provision`, and never a step in the skill's pipeline.
 
-**It deletes ids, not names.** The only input is this project's `.provisioning-state.json`. Nothing is discovered by name, slug, prefix, or pattern, so a bug or a stale slug cannot reach a resource this project did not create. A missing state file is a hard error, not an empty success.
+**It deletes only what this project created.** That is a property of the input, not a checklist bolted on top. The sole input is this project's `.provisioning-state.json`, so nothing is ever discovered by name, slug, prefix, or pattern, and a resource this project did not create has no path into the delete list. A missing state file is a hard error, not an empty success.
+
+Two facts recorded at provisioning time are what make this hold:
+
+- **`origin` per id: `created` or `adopted`.** Provisioning writes `created` only when the API call it just made returned a new resource. An id supplied by the operator or matched from the account, such as an existing avatar under `avatar.source: "reuse"`, is recorded `adopted`. **Teardown deletes `created` and never touches `adopted`,** which it reports as skipped so the operator can see what was left standing and why. Without this field, tearing down a project that reused an existing avatar would delete an asset the project never owned.
+- **`partnerId` in the state file.** Teardown compares it to the partner id in `.env` and aborts before the first call on a mismatch. This is what catches a state file paired with the wrong account, whether from a swapped `.env`, a copied project directory, or a restored backup. It needs no operator input, so it protects an unattended run exactly as well as an interactive one.
 
 Required behavior:
 
-- **Confirm against the account, not the flag.** It prints the partner id and every id it is about to delete, then requires the operator to type the partner id back. `--yes` alone is not enough; `--yes` plus `--partner-id <id>` matching `.env` is, which is what lets CI and an autonomous run use it without an interactive prompt while still making the target explicit.
-- **Honor a protected-id list.** A gitignored `protected-ids.json` at the project root names ids that must never be deleted whatever the state file says. Presence of a listed id aborts the whole run before the first delete.
+- **Print the plan, then act.** It lists the partner id, every id it will delete, and every `adopted` id it will skip. With `--yes` it proceeds; without it, it asks. The account check above is automatic and not waivable by a flag.
 - **Reverse creation order,** so a category is removed after the resources filed under it.
 - **Write state after each delete.** A killed teardown resumes; it never re-deletes.
 - **Idempotent.** An id already gone counts as success. A second run on a torn-down project makes no call and exits 0.

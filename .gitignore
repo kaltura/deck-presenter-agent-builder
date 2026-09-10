@@ -20,7 +20,6 @@ data/kb/
 # Per-project runtime state
 .provisioning-state.json
 .deploy-result.json
-protected-ids.json
 
 # Local-only notes and lists handed to an agent as context, never committed
 *.local.md
