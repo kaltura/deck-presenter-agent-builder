@@ -10,6 +10,8 @@ import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT,
 import { connect, adminKs } from './lib/kaltura.mjs';
 import { loadState, writeState, statePath } from './lib/state.mjs';
 import { deleteEntry, deleteShortLink } from './lib/ovp.mjs';
+import { loadCredentials } from './lib/env.mjs';
+import { messagingBaseUrl, mintClassicKs, messagingApi } from './lib/messaging.mjs';
 
 /** Reverse of creation order: deploy.mjs runs after provision.mjs, so its ids die first. */
 const DELETE_ORDER = [
@@ -17,6 +19,9 @@ const DELETE_ORDER = [
   'htmlEntryId',
   'pdfEntryId',
   'widgetId', // no delete call exists for a widget id; it is dropped by deleting the agent.
+  'followUpLifecycleRuleBId',
+  'followUpLifecycleRuleAId',
+  'followUpEmailTemplateId',
   'agentId',
   'avatarId',
   'configId',
@@ -35,6 +40,17 @@ const DELETERS = {
   shortLinkId: (mgmt, id, ks) => deleteShortLink(ks, id),
   htmlEntryId: (mgmt, id, ks) => deleteEntry(ks, id),
   pdfEntryId: (mgmt, id, ks) => deleteEntry(ks, id),
+  followUpLifecycleRuleAId: (mgmt, id, ks) => mgmt.lifecycle.delete(id, ks, CONFIRM),
+  followUpLifecycleRuleBId: (mgmt, id, ks) => mgmt.lifecycle.delete(id, ks, CONFIRM),
+  // The classic Messaging API, not the agentic SDK: mints its own session key.
+  // "email-template/delete" follows the list/update/add naming this API uses
+  // elsewhere but is unconfirmed against a live account; if it 404s, the
+  // stale template is harmless (it just sits untagged-and-unused) and can be
+  // removed by hand in the KMC.
+  followUpEmailTemplateId: async (mgmt, id, ks, ctx) => {
+    const classicKs = await mintClassicKs(ctx.creds.partnerId, ctx.creds.adminSecret, ctx.creds.serviceUrl);
+    await messagingApi(messagingBaseUrl(ctx.creds), 'email-template/delete', { id }, classicKs);
+  },
   agentId: (mgmt, id, ks) => mgmt.agents.delete(id, ks, CONFIRM),
   avatarId: (mgmt, id, ks) => mgmt.avatars.delete(id, ks, CONFIRM),
   configId: (mgmt, id, ks) => mgmt.intellects.delete(id, ks, CONFIRM),
@@ -77,6 +93,7 @@ async function main() {
   }
 
   const ks = await adminKs(mgmt);
+  const ctx = { creds: loadCredentials(projectRoot) };
   const deleted = [];
   const survivors = [];
 
@@ -92,7 +109,7 @@ async function main() {
     const del = DELETERS[key];
     try {
       progress(flags, `[${key}] deleting ${step.value}...`);
-      await del(mgmt, step.value, ks);
+      await del(mgmt, step.value, ks, ctx);
       deleted.push({ key, id: step.value });
       delete state.steps[key];
       writeState(projectRoot, state);

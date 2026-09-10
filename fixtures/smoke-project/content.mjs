@@ -118,3 +118,118 @@ export const END_SESSION_TOOL = project.features?.endSessionTool
       waitForResponse: false,
     }
   : null;
+
+// ── Follow-up email (PLAN.md 10, docs/implementation-appendix.md "follow-up email").
+// Only consulted by update-followup.mjs, and only when features.followUpEmail is on. ──
+const followUp = project.followUpEmail || {};
+
+export const FOLLOWUP_EMAIL_ADMIN_TAG = `${project.slug}-followup-email`;
+
+export const FOLLOWUP_SUMMARY_PROMPT = followUp.summaryPrompt
+  ? sub(followUp.summaryPrompt, VARS)
+  : `Summarize this ${VARS.PRODUCT_OR_TOPIC} presentation conversation in 1-2 sentences, written for ${VARS.PERSONA_NAME}'s team to read after the fact.`;
+
+const EMAIL_ACCENT = project.branding?.primaryColor || '#3b82f6';
+const EMAIL_SECTION = 'background-color:#ffffff;padding:32px 40px;margin-bottom:12px;border-radius:8px;';
+const EMAIL_H2 = 'font-size:18px;font-weight:700;margin-bottom:12px;color:#111111;';
+const EMAIL_TEXT = 'font-size:15px;line-height:1.7;color:#333333;margin-bottom:4px;white-space:pre-wrap;';
+
+// Placeholders are {TOKEN}, the classic Messaging API's own template syntax
+// (never {{TOKEN}}, this engine's own placeholder syntax). Inline CSS only:
+// the template engine treats any "{...}" as a token candidate, so a <style>
+// block's own braces 400 the call.
+const FOLLOWUP_EMAIL_BODY_HTML = `<!DOCTYPE html>
+<html lang="${project.language || 'en'}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${VARS.PRODUCT_OR_TOPIC} conversation summary</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f0f0;font-family:Arial,sans-serif;font-size:16px;color:#222222;">
+  <div style="max-width:620px;margin:0 auto;background-color:#f0f0f0;">
+    <div style="height:5px;background-color:${EMAIL_ACCENT};"></div>
+
+    <div style="${EMAIL_SECTION}">
+      <div style="font-size:15px;font-weight:700;letter-spacing:0.5px;color:${EMAIL_ACCENT};text-transform:uppercase;margin-bottom:4px;">${VARS.PRODUCT_OR_TOPIC}</div>
+      <div style="font-size:13px;color:#777777;margin-bottom:20px;">Conversation with {AGENTNAME}</div>
+      <h2 style="${EMAIL_H2}">Topic: {TOPIC}</h2>
+      <p style="${EMAIL_TEXT}">{SUMMARY}</p>
+    </div>
+
+    <div style="${EMAIL_SECTION}">
+      <h2 style="${EMAIL_H2}">Visitor feedback</h2>
+      <p style="${EMAIL_TEXT}">{FEEDBACK}</p>
+    </div>
+
+    <div style="${EMAIL_SECTION}">
+      <h2 style="${EMAIL_H2}">Contact details shared</h2>
+      <p style="${EMAIL_TEXT}">{CONTACT}</p>
+    </div>
+
+    <div style="${EMAIL_SECTION}">
+      <div style="font-size:15px;color:#333333;margin-top:0;line-height:1.8;">&mdash; {AGENTNAME}</div>
+      <br/>
+      <p style="font-size:13px;line-height:1.6;color:#888888;">${VARS.PRODUCT_OR_TOPIC}</p>
+    </div>
+  </div>
+</body>
+</html>
+`;
+
+export const FOLLOWUP_EMAIL_TEMPLATE = {
+  name: `${AGENT_DISPLAY_NAME} — Conversation Insight`,
+  adminTags: FOLLOWUP_EMAIL_ADMIN_TAG,
+  subject: `New ${VARS.PRODUCT_OR_TOPIC} conversation with ${VARS.PERSONA_NAME}`,
+  fromName: `${VARS.PERSONA_NAME}, ${VARS.PRODUCT_OR_TOPIC}`,
+  toAttributePath: '{USER.email}',
+  body: FOLLOWUP_EMAIL_BODY_HTML,
+  msgParamsMap: {
+    AGENTNAME: { type: 'String' },
+    USER: { type: 'User' },
+    SUMMARY: { type: 'String' },
+    TOPIC: { type: 'String' },
+    FEEDBACK: { type: 'String' },
+    CONTACT: { type: 'String' },
+  },
+  emailProviderId: followUp.emailProviderId || '',
+  unsubscribeGroups: [],
+};
+
+const FOLLOWUP_REQUIRED_KEYS = ['SUMMARY', 'TOPIC', 'FEEDBACK', 'CONTACT'];
+
+export const FOLLOWUP_LIFECYCLE_RULE_A = {
+  name: `${AGENT_DISPLAY_NAME} — extract insights on session end`,
+  systemName: `${project.slug}_session_insights`,
+  eventType: 'session_ended',
+  objectType: 'thread',
+  action: {
+    actionType: 'triggerInsight',
+    insights: [
+      {
+        insightKey: 'TOPIC',
+        valueType: 'string',
+        prompt: `In one short sentence, what was the visitor mainly trying to learn about ${VARS.PRODUCT_OR_TOPIC}, and did ${VARS.PERSONA_NAME} help them get there?`,
+      },
+      {
+        insightKey: 'FEEDBACK',
+        valueType: 'string',
+        prompt: 'Any explicit feedback, praise, criticism, or suggestions the visitor gave about the presentation, the avatar, or the experience. If none was given, answer exactly "No feedback was provided."',
+      },
+      {
+        insightKey: 'CONTACT',
+        valueType: 'string',
+        prompt: 'Any contact details or company/role info the visitor provided (name, email, company, role, phone), as given via the contact form or in conversation. Format as a short plain-text list. If none was given, answer exactly "No contact details were submitted."',
+      },
+    ],
+  },
+};
+
+/** Built after the email template step, once its final id is known. */
+export const followupLifecycleRuleB = (templateId) => ({
+  name: `${AGENT_DISPLAY_NAME} — email on analysis update`,
+  systemName: `${project.slug}_send_summary_email`,
+  eventType: 'analysis_updated',
+  objectType: 'thread',
+  eventConditions: [{ field: 'changed_keys', operator: 'has_all', value: FOLLOWUP_REQUIRED_KEYS }],
+  action: { actionType: 'sendInsightEmail', recipients: followUp.recipients || [], templateId },
+});

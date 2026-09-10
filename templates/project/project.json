@@ -16,6 +16,11 @@
     "knowledgeBase": false,
     "followUpEmail": false
   },
+  "followUpEmail": {
+    "recipients": [],
+    "emailProviderId": "",
+    "summaryPrompt": ""
+  },
   "sessionMaxSeconds": 900,
   "capabilities": {
     "avatar": "on",

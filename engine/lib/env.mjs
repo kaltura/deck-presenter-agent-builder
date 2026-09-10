@@ -36,11 +36,12 @@ export function loadCredentials(projectRoot) {
   const adminSecret = get('KALTURA_ADMIN_SECRET');
   const serviceUrl = get('KALTURA_SERVICE_URL') || 'https://cdnapisec.kaltura.com';
   const widgetId = get('KALTURA_WIDGET_ID') || '';
+  const messagingUrl = get('KALTURA_MESSAGING_URL') || '';
 
   const missing = [];
   if (!partnerId) missing.push('KALTURA_PARTNER_ID');
   if (!adminSecret) missing.push('KALTURA_ADMIN_SECRET');
   if (missing.length) return { ok: false, missing, envPath };
 
-  return { ok: true, partnerId: String(partnerId), adminSecret, serviceUrl, widgetId, envPath };
+  return { ok: true, partnerId: String(partnerId), adminSecret, serviceUrl, widgetId, messagingUrl, envPath };
 }

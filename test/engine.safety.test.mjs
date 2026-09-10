@@ -1,8 +1,9 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { writeFileSync, rmSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { writeFileSync, readFileSync, rmSync, existsSync, mkdtempSync, cpSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 // Runs directly against fixtures/smoke-project (not a copy elsewhere): content.mjs
 // resolves the @kaltura/intelligent-agents bare specifier by walking up from the
@@ -93,6 +94,42 @@ test('teardown skips an adopted-origin id and only plans to delete created ones'
   assert.match(stderr, /delete navToolId = 111/);
   assert.match(stderr, /skip avatarId = 222 \(origin: adopted, not this project's to delete\)/);
   rmSync(STATE_PATH, { force: true });
+});
+
+test('update-followup skips with no network call when features.followUpEmail is off', () => {
+  const { code, stderr, stdout } = run('engine/update-followup.mjs', ['--project', FIXTURE, '--json']);
+  assert.equal(code, 0, stderr);
+  assert.match(stderr, /followUpEmail is off/);
+  assert.match(stdout, /"skipped": true/);
+});
+
+test('update-followup refuses when followUpEmail is on but recipients is empty', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'followup-test-'));
+  cpSync(FIXTURE, dir, { recursive: true });
+  const project = JSON.parse(readFileSync(resolve(dir, 'project.json'), 'utf8'));
+  project.features.followUpEmail = true;
+  writeFileSync(resolve(dir, 'project.json'), JSON.stringify(project));
+  writeFileSync(resolve(dir, '.env'), `KALTURA_PARTNER_ID=${FIXTURE_PARTNER_ID}\nKALTURA_ADMIN_SECRET=fake-secret-for-dry-run-only\n`);
+
+  const { code, stderr } = run('engine/update-followup.mjs', ['--project', dir]);
+  assert.equal(code, 4, stderr);
+  assert.match(stderr, /followUpEmail\.recipients is empty/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('update-followup refuses when KALTURA_MESSAGING_URL is unset', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'followup-test-'));
+  cpSync(FIXTURE, dir, { recursive: true });
+  const project = JSON.parse(readFileSync(resolve(dir, 'project.json'), 'utf8'));
+  project.features.followUpEmail = true;
+  project.followUpEmail = { recipients: ['test@example.com'], emailProviderId: 'fake-provider-id' };
+  writeFileSync(resolve(dir, 'project.json'), JSON.stringify(project));
+  writeFileSync(resolve(dir, '.env'), `KALTURA_PARTNER_ID=${FIXTURE_PARTNER_ID}\nKALTURA_ADMIN_SECRET=fake-secret-for-dry-run-only\n`);
+
+  const { code, stderr } = run('engine/update-followup.mjs', ['--project', dir]);
+  assert.equal(code, 3, stderr);
+  assert.match(stderr, /KALTURA_MESSAGING_URL is not set/);
+  rmSync(dir, { recursive: true, force: true });
 });
 
 test("a project's own .env wins over an ambient KALTURA_PARTNER_ID in the shell", () => {
