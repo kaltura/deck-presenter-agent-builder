@@ -1,0 +1,14 @@
+[
+  { "question": "Do we need to replace our current irrigation hardware to use Canopy?", "file": "faq.md", "heading": "Does Canopy replace our existing irrigation hardware?" },
+  { "question": "What does the dashboard show when a sensor loses signal?", "file": "faq.md", "heading": "What happens if a sensor loses power or signal?" },
+  { "question": "Can alerts go to multiple phones on our team?", "file": "faq.md", "heading": "Can more than one person on the team get alerts?" },
+  { "question": "Do the sensors keep reporting outside the growing season?", "file": "faq.md", "heading": "Does Canopy work in the off season?" },
+  { "question": "Is there a dedicated mobile app, or does the dashboard work on a phone browser?", "file": "faq.md", "heading": "Is there a mobile app?" },
+  { "question": "How does the automation feature connect to our valve controllers?", "file": "integrations.md", "heading": "Valve controllers" },
+  { "question": "Where does the moisture forecast get its weather data from?", "file": "integrations.md", "heading": "Weather data" },
+  { "question": "Can we export our moisture history as a spreadsheet?", "file": "integrations.md", "heading": "Export" },
+  { "question": "Are the sensors solar-powered or do they need a wired power connection?", "file": "sensor-specs.md", "heading": "Power" },
+  { "question": "How often do the sensors report soil moisture and temperature readings?", "file": "sensor-specs.md", "heading": "Reporting interval" },
+  { "question": "How many acres does one sensor cluster typically cover?", "file": "sensor-specs.md", "heading": "Coverage per sensor cluster" },
+  { "question": "What kind of network do the sensors use to reach the gateway?", "file": "sensor-specs.md", "heading": "Connectivity" }
+]

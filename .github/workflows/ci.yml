@@ -77,3 +77,9 @@ jobs:
       # PLAN.md 6.4's semantic lint (slide references, chapter ranges, KB
       # frontmatter, the fixed identity-and-disclosure skeleton).
       - run: npm run lint-prompts
+
+      # Also needs no live account: a chunk-level retrieval eval over
+      # demo/'s KB files against a synthetic Q&A set, so a retrieval miss
+      # (wrong chunk found) is caught separately from a generation miss
+      # (the live agent's own LLM step, out of scope for this check).
+      - run: npm run eval-retrieval

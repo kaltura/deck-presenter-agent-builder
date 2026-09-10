@@ -29,6 +29,7 @@
     "check-template-update": "node bin/check-template-update.mjs",
     "scan": "node bin/scan-leaks.mjs",
     "lint-prompts": "node bin/lint-prompts.mjs --project demo && node bin/lint-prompts.mjs --project fixtures/smoke-project",
+    "eval-retrieval": "node bin/eval-retrieval.mjs --project demo",
     "test": "node --test \"test/**/*.test.mjs\""
   },
   "dependencies": {
