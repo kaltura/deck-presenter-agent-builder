@@ -137,7 +137,8 @@ async function main() {
   if (existsSync(slidesDir)) {
     for (const n of validSlides) {
       const slide = JSON.parse(readFileSync(resolve(slidesDir, `${String(n).padStart(2, '0')}.json`), 'utf8'));
-      slideMetrics.set(n, Array.isArray(slide.key_metrics) && slide.key_metrics.length > 0);
+      const metrics = slide.content?.key_metrics;
+      slideMetrics.set(n, !!metrics && typeof metrics === 'object' && Object.keys(metrics).length > 0);
     }
   }
   const proofWords = /\b(proof|result|case study|metric|data point|example)\b/i;
