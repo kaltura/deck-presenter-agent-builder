@@ -61,7 +61,7 @@ async function main() {
     '  copy templates/prompts/* into prompts/',
     '  copy client/ (the presenter app) into client/',
     '  copy engine/ into scripts/, plus doctor.mjs at the project root',
-    '  copy skills/build-deck-agent/ into .claude/skills/build-deck-agent/ (if built)',
+    '  copy skills/build-deck-agent/ (plus docs/implementation-appendix.md) into .claude/skills/build-deck-agent/ (if built)',
     '  write project.json, package.json, .template-version',
     '  git init (if not already a repo)',
   ];
@@ -94,6 +94,13 @@ async function main() {
   if (existsSync(skillSrc)) {
     mkdirSync(resolve(targetDir, '.claude/skills'), { recursive: true });
     cpSync(skillSrc, resolve(targetDir, '.claude/skills/build-deck-agent'), { recursive: true });
+    // The concrete Kaltura call contract the skill's reference-provisioning.md points
+    // at. Copied alongside the skill so a scaffolded project is self-contained and
+    // never needs a live checkout of the toolkit repo to troubleshoot provisioning.
+    const appendixSrc = resolve(TOOLKIT_ROOT, 'docs/implementation-appendix.md');
+    if (existsSync(appendixSrc)) {
+      cpSync(appendixSrc, resolve(targetDir, '.claude/skills/build-deck-agent/reference-implementation-appendix.md'));
+    }
   } else {
     progress(flags, 'skills/build-deck-agent does not exist yet in this toolkit checkout; skipped.');
   }
