@@ -8,7 +8,7 @@ import { parseSections } from './prompt-format.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -375,7 +375,23 @@ function resetChatIdleTimer() {
 // the avatar's current turn instead of running it now.
 function speakInterrupting(text) {
   if (!session || sessionEnded) return;
-  const send = () => { if (session && !sessionEnded) session.speak(text); };
+  // The SDK can deliver the agent's first navigate_to_slide tool call before
+  // session.state flips to 'connected' (connect() resolves after the join
+  // handshake, but a queued tool-call event can land in the same tick). Wait
+  // for 'connected' rather than assume it, so an early slide-change nudge
+  // doesn't throw KalturaError('speak() requires a connected session').
+  const send = () => {
+    if (!session || sessionEnded) return;
+    if (session.state === 'connected') { session.speak(text); return; }
+    let fired = false;
+    const offState = session.on('stateChange', (state) => {
+      if (fired || state !== 'connected') return;
+      fired = true;
+      offState();
+      if (session && !sessionEnded) session.speak(text);
+    });
+    setTimeout(() => { if (!fired) offState(); }, 5000);
+  };
   if (!(session.speaking || avatarSpeaking)) { send(); return; }
   let done = false;
   let off = () => {};
