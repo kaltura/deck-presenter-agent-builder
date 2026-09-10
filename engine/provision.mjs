@@ -213,12 +213,16 @@ async function main() {
         voice = { id: source.voice.id, ...(source.voice.speed != null ? { speed: source.voice.speed } : {}) };
         visual = { ...source.visual };
       } else {
+        // listTemplates() returns {voice, face} bundles (a template's visual
+        // is under `face`, not `visual` — distinct from avatars.get()'s
+        // `visual` shape used on the cloned path above). avatars.create()
+        // itself wants `visual: {id}`, so map face.id into it here.
         const templates = [];
         for await (const t of mgmt.avatars.listTemplates(ks)) templates.push(t);
-        const template = templates.find((t) => t?.voice?.id && t?.visual?.id);
-        if (!template) throw new Error('avatars.listTemplates() returned no usable template with both voice and visual ids.');
+        const template = templates.find((t) => t?.voice?.id && t?.face?.id);
+        if (!template) throw new Error('avatars.listTemplates() returned no usable template with both voice and face ids.');
         voice = { id: template.voice.id };
-        visual = { id: template.visual.id };
+        visual = { id: template.face.id };
       }
       const av = await mgmt.avatars.create({ voice, visual, openingPhrase: content.OPENING_PHRASE }, ks);
       avatarId = av?.id;
