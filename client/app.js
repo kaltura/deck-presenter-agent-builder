@@ -8,7 +8,7 @@ import { parseSections } from './prompt-format.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.3';
+const VERSION = '0.1.4';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -23,6 +23,7 @@ const GOODBYE_PHRASE_RE = /\b(good ?bye|bye+!?|see ya|farewell|that'?s all|i'?m 
 const APP_MARKERS = [NAV_NUDGE_PREFIX, RESUME_CUE_PREFIX, '[NAV HINT:', CONTACT_FORM_PREFIX];
 const CONTACT_COOLDOWN_MS = 60000;
 const CHAT_IDLE_MS = 12000;
+const CHAT_LOG_IDLE_MS = 12000;
 const TYPED_ECHO_WINDOW_MS = 60000;
 
 const stripAppText = (t) => {
@@ -138,6 +139,7 @@ const el = {
 
   chatLogWrapper: document.getElementById('chat-log-wrapper'),
   chatLog: document.getElementById('chat-log'),
+  chatToggle: document.getElementById('chat-toggle'),
   chatForm: document.getElementById('chat-form'),
   chatInput: document.getElementById('chat-input'),
 
@@ -213,6 +215,7 @@ let deckPausedAfterGoodbye = false;
 let contactModalOpen = false;
 let contactSubmitted = false;
 let chatIdleTimer = null;
+let chatLogIdleTimer = null;
 let pageUnloading = false;
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 25;
@@ -418,6 +421,9 @@ function appendChatMessage(text, role) {
   bubble.textContent = toReadableText(stripAppText(text));
   el.chatLog.appendChild(bubble);
   el.chatLog.scrollTop = el.chatLog.scrollHeight;
+  el.chatLogWrapper.classList.remove('idle');
+  clearTimeout(chatLogIdleTimer);
+  chatLogIdleTimer = setTimeout(() => el.chatLogWrapper.classList.add('idle'), CHAT_LOG_IDLE_MS);
   return bubble;
 }
 
@@ -709,26 +715,53 @@ function updateCaptionOffset() {
 
 function initChatLogDrag() {
   let dragging = false;
-  let offsetX = 0;
-  let offsetY = 0;
-  el.chatLogWrapper.addEventListener('pointerdown', (ev) => {
-    if (ev.target.closest('.chat-log')) return;
+  let didDrag = false;
+  let suppressClick = false;
+  let startX, startY, startLeft, startTop;
+
+  function onDown(clientX, clientY) {
     dragging = true;
+    didDrag = false;
     const rect = el.chatLogWrapper.getBoundingClientRect();
-    offsetX = ev.clientX - rect.left;
-    offsetY = ev.clientY - rect.top;
-    el.chatLogWrapper.setPointerCapture(ev.pointerId);
-  });
-  el.chatLogWrapper.addEventListener('pointermove', (ev) => {
+    const parentRect = el.slideWrapper.getBoundingClientRect();
+    startX = clientX;
+    startY = clientY;
+    startLeft = rect.left - parentRect.left;
+    startTop = rect.top - parentRect.top;
+  }
+  function onMove(clientX, clientY) {
     if (!dragging) return;
-    const parent = el.slideWrapper.getBoundingClientRect();
-    el.chatLogWrapper.style.left = `${ev.clientX - parent.left - offsetX}px`;
-    el.chatLogWrapper.style.top = `${ev.clientY - parent.top - offsetY}px`;
+    const dx = clientX - startX;
+    const dy = clientY - startY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) didDrag = true;
+    if (!didDrag) return;
+    el.chatLogWrapper.classList.add('dragging');
+    const parentRect = el.slideWrapper.getBoundingClientRect();
+    const maxLeft = parentRect.width - el.chatLogWrapper.offsetWidth;
+    const maxTop = parentRect.height - el.chatLogWrapper.offsetHeight;
+    const left = Math.min(Math.max(0, startLeft + dx), Math.max(0, maxLeft));
+    const top = Math.min(Math.max(0, startTop + dy), Math.max(0, maxTop));
+    el.chatLogWrapper.style.left = `${left}px`;
+    el.chatLogWrapper.style.top = `${top}px`;
+    el.chatLogWrapper.style.right = 'auto';
     el.chatLogWrapper.style.bottom = 'auto';
-  });
-  el.chatLogWrapper.addEventListener('pointerup', () => {
+  }
+  function onUp() {
+    if (dragging && didDrag) suppressClick = true;
     dragging = false;
+    el.chatLogWrapper.classList.remove('dragging');
     clampChatLogWrapperPosition();
+  }
+
+  el.chatToggle.addEventListener('mousedown', (ev) => onDown(ev.clientX, ev.clientY));
+  window.addEventListener('mousemove', (ev) => onMove(ev.clientX, ev.clientY));
+  window.addEventListener('mouseup', onUp);
+  el.chatToggle.addEventListener('touchstart', (ev) => onDown(ev.touches[0].clientX, ev.touches[0].clientY), { passive: true });
+  window.addEventListener('touchmove', (ev) => onMove(ev.touches[0].clientX, ev.touches[0].clientY), { passive: true });
+  window.addEventListener('touchend', onUp);
+  el.chatToggle.addEventListener('click', (ev) => {
+    if (suppressClick) { suppressClick = false; ev.preventDefault(); return; }
+    el.chatLogWrapper.classList.toggle('collapsed');
   });
 }
 
