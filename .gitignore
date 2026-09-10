@@ -11,6 +11,7 @@ input/
 !demo/input/**
 *.pdf
 *.pptx
+!test/fixtures/sample-deck.pptx
 *.ppt
 *.key
 
