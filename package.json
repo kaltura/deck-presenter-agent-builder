@@ -1,0 +1,31 @@
+{
+  "name": "deck-presenter-agent-builder",
+  "version": "0.0.0",
+  "description": "Turn a deck and its speaker notes into a live AI presenter agent on Kaltura.",
+  "license": "Apache-2.0",
+  "author": "Zohar Babin",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "deck-presenter-agent-builder": "bin/create-project.mjs"
+  },
+  "files": [
+    "bin/",
+    "engine/",
+    "client/",
+    "templates/",
+    "skills/",
+    ".claude-plugin/",
+    "docs/",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "doctor": "node bin/doctor.mjs",
+    "check-template-update": "node bin/check-template-update.mjs"
+  }
+}

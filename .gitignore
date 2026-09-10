@@ -1,0 +1,41 @@
+# Credentials. Never commit any of these.
+.env
+.env.*
+!.env.example
+
+# Raw deck input and working files. These belong in a project repo, not here.
+input/
+*.pdf
+*.pptx
+*.ppt
+*.key
+
+# Real deck and knowledge-base content. Only demo/ may hold generated content,
+# and only for the fictional demo product.
+data/slides/
+data/kb/
+!demo/**/data/slides/
+!demo/**/data/kb/
+
+# Per-project runtime state
+.provisioning-state.json
+.deploy-result.json
+
+# Local-only notes handed to an agent as context, never committed
+*.local.md
+.porting-source.local.md
+
+# Build output
+dist/
+*.tmp-*
+
+# Node
+node_modules/
+npm-debug.log*
+.npm
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
