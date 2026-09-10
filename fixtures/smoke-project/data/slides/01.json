@@ -1,0 +1,15 @@
+{
+  "slide": 1,
+  "title": "Northwind Lumen: an overview",
+  "category": "intro",
+  "talking_points": [
+    "Lumen is a fictional product used only to smoke-test this engine.",
+    "Nothing in this fixture describes a real company or a real service.",
+    "Three slides is enough to prove bundling and numbering work."
+  ],
+  "content": {
+    "headline": "One place to see every shipment",
+    "bullets": ["Live tracking", "Shared dashboards", "Alerts that make sense"]
+  },
+  "narrator_guidance": "Open warmly. Say what Lumen is in one sentence, then invite a question."
+}

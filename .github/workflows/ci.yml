@@ -1,0 +1,63 @@
+name: CI
+
+# Plain pull_request only. It checks out untrusted fork code, so it must never
+# be pull_request_target or workflow_run, and it is given no secrets.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Leak and path guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No local blocked-strings list here, so this runs the structural rules
+      # only: account ids, secrets, session keys, developer paths, real emails.
+      - name: Scan for credentials and account ids
+        run: node bin/scan-leaks.mjs
+
+      - name: Block committed content, credentials, and porting source
+        run: |
+          # Real deck content is allowed only under fixtures/ and demo/, which
+          # are fictional by rule. data/slides anywhere else is a leak.
+          bad=$(git ls-files \
+            | grep -vE '^(fixtures|demo)/' \
+            | grep -vE '^\.env\.example$' \
+            | grep -E \
+              -e '^port/' \
+              -e '^\.env($|\.)' \
+              -e '\.(pdf|pptx|ppt|key)$' \
+              -e '(^|/)data/(slides|kb)/' \
+              -e '\.local\.(md|txt)$' \
+              -e '(provisioning-state|deploy-result)\.json$' \
+            || true)
+          if [ -n "$bad" ]; then
+            echo "These paths must never be committed:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "No blocked paths tracked."
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+
+      - run: npm test

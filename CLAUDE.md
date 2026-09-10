@@ -8,8 +8,17 @@ This is `deck-presenter-agent-builder`: a public toolkit that turns a deck plus 
 |---|---|
 | `PLAN.md` | The full design. Numbered sections; everything below cites them. |
 | `docs/implementation-appendix.md` | The concrete Kaltura API contract. Read before touching `engine/`. |
+| `port/README.md` | Working reference code, staged locally and gitignored. Read this before writing any `engine/` or `client/` file. |
 
-Current state: planning is done, implementation has not started. **The entry point is PLAN.md section 13, Phase 0.**
+Current state: the design, the safety toolchain, and the porting source are in place. `engine/`, `client/`, `templates/`, `skills/`, `bin/create-project.mjs`, and `demo/` do not exist yet. **The entry point is PLAN.md section 13, Phase 0.**
+
+## Port, do not reinvent
+
+`port/` holds a working implementation of this same app, built for one specific deck. It is gitignored, and it stays that way: it carries real account ids and one customer's content. Read it for the API call shapes, the payload fields, the bundling trick, and the client behavior, then write the generic version into `engine/` and `client/`.
+
+`port/README.md` maps every staged file to its destination and says what to take from it. Two files there are already generic and can be copied nearly as-is; the rest need the deck-specific parts replaced by `project.json` and `data/*` lookups. Several one-off scripts collapse into one generic command, which the map spells out.
+
+Committing anything under `port/` fails CI.
 
 ## Non-negotiables
 
@@ -54,11 +63,16 @@ This is architectural, not a gitignore rule (PLAN.md 3): real decks live in sepa
 | `templates/prompts/` | Prompt skeletons with `{{PLACEHOLDERS}}`. No real wording. |
 | `templates/project/` | The new-project skeleton `create-project.mjs` copies. |
 | `skills/build-deck-agent/` | The pipeline skill. `SKILL.md` plus `reference-*.md`. |
-| `bin/` | `create-project.mjs`, `check-template-update.mjs`, `doctor.mjs`. |
+| `bin/` | `create-project.mjs`, `check-template-update.mjs`, `doctor.mjs`, `scan-leaks.mjs`. |
+| `fixtures/smoke-project/` | Three-slide fictional project for testing the engine offline. |
+| `test/` | `node --test` suites. |
 | `demo/` | One fictional product, fake deck, fake notes. Phase 1. |
 | `docs/` | Public docs. |
+| `port/` | Gitignored reference implementation. Read only, never committed. |
 
 Node 22 or newer. ESM only (`"type": "module"`). Keep dependencies minimal; reach for the standard library first.
+
+The SDK is a pinned git dependency, `github:kaltura/intelligent-agents-sdk#v1.19.0`. It is a public MIT repo with no install-time build scripts, so `npm ci` resolves it cleanly and esbuild bundles it into the client. Import `@kaltura/intelligent-agents/management` server side and `/experience` in the client.
 
 ## Things that are easy to get wrong
 
@@ -70,6 +84,23 @@ Node 22 or newer. ESM only (`"type": "module"`). Keep dependencies minimal; reac
 
 ## Verifying your work
 
-Phase 0 has no test suite yet, so prove engine changes by hand-running against a throwaway `project.json`, a sandbox `.env`, and stub slide files. The concrete checklist is at the end of `docs/implementation-appendix.md`.
+Run both before every commit. CI runs the same two, so a red commit is a wasted round trip.
 
-Once CI exists: the live-account regression suite runs only via `workflow_dispatch`, never on a fork PR. Plain `pull_request` runs the secretless checks (secret scan, blocked paths, lint, golden outputs).
+```sh
+npm run scan   # leak guard over every tracked file
+npm test       # node --test
+```
+
+`npm run scan` reads `.blocked-strings.local.txt`, a gitignored list of exact strings from the reference. CI has no such file and runs the structural rules alone, which still catch every shape: account ids, secrets, session keys, developer paths, real emails. A finding is never a false alarm to work around. Fix the file.
+
+Prove engine changes offline against the fixture first:
+
+```sh
+node engine/bundle.mjs    --project fixtures/smoke-project
+node engine/provision.mjs --project fixtures/smoke-project --dry-run
+node engine/verify.mjs     --project fixtures/smoke-project --dry-run
+```
+
+Anything past `--dry-run` needs credentials in a gitignored `.env`, copied from `.env.example`. The concrete checklist is at the end of `docs/implementation-appendix.md`.
+
+The live-account regression suite runs only via `workflow_dispatch`, never on a fork PR. Plain `pull_request` runs the secretless checks.

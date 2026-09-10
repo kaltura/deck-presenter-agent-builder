@@ -1,0 +1,20 @@
+{
+  "projectName": "smoke-project",
+  "productName": "Northwind Lumen",
+  "companyName": "Northwind",
+  "personaName": "Iris",
+  "language": "en",
+  "features": {
+    "contactForm": true,
+    "endSessionTool": true,
+    "knowledgeBase": false,
+    "followUpEmail": false
+  },
+  "sessionMaxSeconds": 900,
+  "capabilities": {
+    "avatar": "on",
+    "use_knowledge_base": "off",
+    "use_content_search": "on"
+  },
+  "avatar": { "source": "fresh" }
+}

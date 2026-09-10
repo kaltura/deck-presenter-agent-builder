@@ -26,6 +26,14 @@
   ],
   "scripts": {
     "doctor": "node bin/doctor.mjs",
-    "check-template-update": "node bin/check-template-update.mjs"
+    "check-template-update": "node bin/check-template-update.mjs",
+    "scan": "node bin/scan-leaks.mjs",
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "@kaltura/intelligent-agents": "github:kaltura/intelligent-agents-sdk#v1.19.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

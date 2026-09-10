@@ -1,0 +1,6 @@
+{
+  "rules": [
+    { "when": "the visitor asks how it works", "goToSlide": 2 },
+    { "when": "the visitor asks about price or cost", "goToSlide": 3 }
+  ]
+}

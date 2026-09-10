@@ -21,9 +21,16 @@ data/kb/
 .provisioning-state.json
 .deploy-result.json
 
-# Local-only notes handed to an agent as context, never committed
+# Local-only notes and lists handed to an agent as context, never committed
 *.local.md
+*.local.txt
 .porting-source.local.md
+.blocked-strings.local.txt
+
+# Reference implementation staged for porting. Holds real customer content and
+# real account ids. Read it, write generic code into engine/ and client/.
+# Nothing under here may ever be committed.
+port/
 
 # Build output
 dist/

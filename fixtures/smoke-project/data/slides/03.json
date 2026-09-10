@@ -1,0 +1,17 @@
+{
+  "slide": 3,
+  "title": "What it costs",
+  "category": "pricing",
+  "talking_points": [
+    "Pricing here is invented for testing and means nothing.",
+    "Two tiers keep the fixture small.",
+    "End by offering to answer questions."
+  ],
+  "content": {
+    "tiers": [
+      { "name": "Team", "price": "100 per month", "seats": "up to 10" },
+      { "name": "Company", "price": "400 per month", "seats": "unlimited" }
+    ]
+  },
+  "narrator_guidance": "State both tiers plainly. Do not push. Offer to take questions."
+}

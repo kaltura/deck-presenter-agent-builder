@@ -1,0 +1,16 @@
+{
+  "slide": 2,
+  "title": "How it fits together",
+  "category": "architecture",
+  "talking_points": [
+    "Data arrives from carrier feeds and is normalised once.",
+    "Dashboards read from that single normalised view.",
+    "Alerts run on the same view, so numbers never disagree."
+  ],
+  "content": {
+    "stages": ["Ingest", "Normalise", "Serve"],
+    "note": "Fictional architecture. Do not treat as guidance."
+  },
+  "narrator_guidance": "Walk the three stages left to right. Keep it under thirty seconds.",
+  "footnote": "Fixture data only."
+}
