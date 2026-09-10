@@ -26,7 +26,7 @@
     "avatar": "on",
     "use_content_search": "on"
   },
-  "avatar": { "source": "fresh", "templateName": "" },
+  "avatar": { "source": "fresh", "templateName": "", "voiceSpeed": null },
   "branding": {},
   "disclosure": { "text": "", "locale": "en" },
   "privacy": {

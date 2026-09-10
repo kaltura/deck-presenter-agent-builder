@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * Syncs the avatar's openingPhrase to match this project's own content.mjs,
- * and its voice/visual to match project.json avatar.templateName if set.
+ * its voice/visual to match project.json avatar.templateName if set, and its
+ * voice speed to project.json avatar.voiceSpeed if set (0.7-1.2; the runtime
+ * clamps to that band regardless). Leave voiceSpeed null to never touch it.
  * motionControl is not yet driven by any project.json field, so this
  * command never touches it.
  *
@@ -47,10 +49,16 @@ async function main() {
     desiredVisualId = template.face.id;
   }
 
+  const desiredSpeed = project.avatar?.voiceSpeed;
+  if (desiredSpeed != null && (desiredSpeed < 0.7 || desiredSpeed > 1.2)) {
+    fail(flags, EXIT.USAGE, `avatar.voiceSpeed must be between 0.7 and 1.2, got ${desiredSpeed}`);
+  }
+
   const openingUpToDate = before.openingPhrase === desiredOpening;
   const voiceUpToDate = before.voice?.id === desiredVoiceId;
   const visualUpToDate = before.visual?.id === desiredVisualId;
-  if (openingUpToDate && voiceUpToDate && visualUpToDate) {
+  const speedUpToDate = desiredSpeed == null || before.voice?.speed === desiredSpeed;
+  if (openingUpToDate && voiceUpToDate && visualUpToDate && speedUpToDate) {
     progress(flags, 'Already up to date.');
     result(flags, { upToDate: true, avatarId });
     return;
@@ -68,18 +76,25 @@ async function main() {
   if (!openingUpToDate) planLines.push(`  openingPhrase: ${JSON.stringify(before.openingPhrase)} -> ${JSON.stringify(desiredOpening)}`);
   if (!voiceUpToDate) planLines.push(`  voice: ${before.voice?.id} -> ${desiredVoiceId} (template "${templateName}")`);
   if (!visualUpToDate) planLines.push(`  visual: ${before.visual?.id} -> ${desiredVisualId} (template "${templateName}")`);
+  if (!speedUpToDate) planLines.push(`  voice.speed: ${before.voice?.speed} -> ${desiredSpeed}`);
   await confirmPlan(flags, planLines);
 
   const body = { id: avatarId, openingPhrase: desiredOpening };
-  if (!voiceUpToDate) body.voice = { id: desiredVoiceId };
+  if (!voiceUpToDate || !speedUpToDate) {
+    body.voice = { id: desiredVoiceId };
+    const speedToSend = desiredSpeed != null ? desiredSpeed : before.voice?.speed;
+    if (speedToSend != null) body.voice.speed = speedToSend;
+  }
   if (!visualUpToDate) body.visual = { id: desiredVisualId };
   await mgmt.avatars.update(body, ks);
 
   const after = await mgmt.avatars.get(avatarId, ks);
+  const expectedSpeed = desiredSpeed != null ? desiredSpeed : before.voice?.speed;
   const errors = [];
   if (after.openingPhrase !== desiredOpening) errors.push('openingPhrase did not apply');
   if (after.voice?.id !== desiredVoiceId) errors.push('voice did not apply as expected');
   if (after.visual?.id !== desiredVisualId) errors.push('visual did not apply as expected');
+  if (expectedSpeed != null && after.voice?.speed !== expectedSpeed) errors.push('voice.speed did not apply as expected');
 
   if (errors.length) {
     progress(flags, `Verification FAILED: ${errors.join('; ')}`);
