@@ -48,7 +48,7 @@ after(() => {
 test('provision --dry-run prints the full plan and makes no mutating call', () => {
   const { code, stderr } = run('engine/provision.mjs', ['--project', FIXTURE, '--dry-run']);
   assert.equal(code, 0, stderr);
-  assert.match(stderr, /navigation tool "smoke-project_navigate_to_slide"/);
+  assert.match(stderr, /navigation tool "smoke_project_navigate_to_slide"/);
   assert.match(stderr, /Dry run: no network mutation performed\./);
   assert.equal(existsSync(STATE_PATH), false);
 });

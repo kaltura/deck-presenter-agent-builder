@@ -73,7 +73,7 @@
     "screen_share_analysis": "off"
   },
   "NAV_TOOL": {
-    "name": "smoke-project_navigate_to_slide",
+    "name": "smoke_project_navigate_to_slide",
     "description": "Silently move the deck of 3 slides to the slide that answers the\nvisitor's question, before you answer it. Never describe this move in speech;\njust call the tool, then present the destination slide's content.",
     "args": {
       "slide_num": {
@@ -90,7 +90,7 @@
     "waitForResponse": true
   },
   "CONTACT_TOOL": {
-    "name": "smoke-project_request_contact",
+    "name": "smoke_project_request_contact",
     "description": "Open the on-screen contact form. Use it only after the visitor agrees to a\nfollow-up, a demo, or being contacted by a person. Never use it just because the\nvisitor gave feedback or asked a question you could answer yourself.",
     "args": {
       "reason": {
@@ -102,7 +102,7 @@
     "waitForResponse": false
   },
   "END_SESSION_TOOL": {
-    "name": "smoke-project_end_session",
+    "name": "smoke_project_end_session",
     "description": "Signal a real, mutual goodbye. Use it only when the visitor clearly says goodbye\nor asks to stop. A single \"thanks\" or a change of topic is not a goodbye; keep\npresenting instead of calling this.",
     "waitForResponse": false
   },

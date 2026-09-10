@@ -25,6 +25,12 @@ const sub = (s, vars) => Object.entries(vars).reduce((acc, [k, v]) => acc.replac
 const project = JSON.parse(readFileSync(resolve(ROOT, 'project.json'), 'utf8'));
 if (!project.slug) throw new Error('project.json is missing "slug".');
 
+// Tool names must be valid identifiers for the Kaltura API
+// (^[A-Za-z_][A-Za-z0-9_]*$); project.slug is free to contain hyphens
+// everywhere else (tags, short-link names), so derive a separate identifier
+// here instead of constraining slug itself.
+const TOOL_NAME_PREFIX = project.slug.replace(/[^A-Za-z0-9_]/g, '_').replace(/^(?=[0-9])/, '_');
+
 export const TOTAL_SLIDES = readdirSync(SLIDES_DIR).filter((f) => f.endsWith('.json')).length;
 export const NAV_RULES = existsSync(resolve(ROOT, 'data/nav-rules.json'))
   ? JSON.parse(readFileSync(resolve(ROOT, 'data/nav-rules.json'), 'utf8'))
@@ -87,7 +93,7 @@ export const CAPABILITIES = { ...DEFAULT_CAPABILITIES, ...overrides };
 
 const NAV_TOOL_PROMPTS = readPromptSections('tools/navigate-to-slide.md');
 export const NAV_TOOL = {
-  name: `${project.slug}_navigate_to_slide`,
+  name: `${TOOL_NAME_PREFIX}_navigate_to_slide`,
   description: sub(NAV_TOOL_PROMPTS['description'], VARS),
   args: {
     slide_num: { prompt: sub(NAV_TOOL_PROMPTS['arg: slide_num'], VARS), type: 'int', required: true },
@@ -103,7 +109,7 @@ export const CONTACT_TOOL = project.features?.contactForm
   ? (() => {
       const p = readPromptSections('tools/request-contact.md');
       return {
-        name: `${project.slug}_request_contact`,
+        name: `${TOOL_NAME_PREFIX}_request_contact`,
         description: sub(p['description'], VARS),
         args: { reason: { prompt: p['arg: reason'], type: 'str', required: false } },
         waitForResponse: false,
@@ -113,7 +119,7 @@ export const CONTACT_TOOL = project.features?.contactForm
 
 export const END_SESSION_TOOL = project.features?.endSessionTool
   ? {
-      name: `${project.slug}_end_session`,
+      name: `${TOOL_NAME_PREFIX}_end_session`,
       description: sub(readPromptSections('tools/end-session.md')['description'], VARS),
       waitForResponse: false,
     }
