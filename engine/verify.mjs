@@ -26,6 +26,21 @@ import { loadContent } from './lib/load-content.mjs';
 const stable = (o) => JSON.stringify(o, Object.keys(o || {}).sort(), 2);
 const eq = (x, y) => JSON.stringify(x) === JSON.stringify(y);
 const strip = (o) => { const c = JSON.parse(JSON.stringify(o || {})); delete c.readAt; return c; };
+// intellects.get() echoes prompts back as an object keyed by index, with each
+// entry carrying server-added fields (e.g. "mode") that content.mjs never sets.
+// content.PROMPTS is a plain array. Normalize the container and compare only
+// the fields we actually push, or every prompt would show as a MISMATCH even
+// when the wording is unchanged.
+const promptsArray = (v) => (Array.isArray(v) ? v : Object.keys(v || {}).sort((a, b) => Number(a) - Number(b)).map((k) => v[k]));
+const pickExpectedFields = (liveEntry, expectedEntry) => {
+  if (!expectedEntry || typeof liveEntry !== 'object' || Array.isArray(liveEntry)) return liveEntry;
+  return Object.fromEntries(Object.keys(expectedEntry).map((f) => [f, liveEntry[f]]));
+};
+const promptsMatch = (live, expected) => {
+  const liveArr = promptsArray(live);
+  const expArr = promptsArray(expected);
+  return liveArr.length === expArr.length && liveArr.every((entry, i) => eq(pickExpectedFields(entry, expArr[i]), expArr[i]));
+};
 
 function snapshotsDir(projectRoot) {
   return resolve(projectRoot, '.verify-snapshots');
@@ -91,7 +106,7 @@ async function main() {
 
     const checks = {
       base_directive: vi.base_directive === content.BASE_DIRECTIVE,
-      prompts: eq(vi.prompts, content.PROMPTS),
+      prompts: promptsMatch(vi.prompts, content.PROMPTS),
       glossary: eq(vi.glossary, content.GLOSSARY),
       allow_client_variables: vi.allow_client_variables === true,
       opening_phrase: va.openingPhrase === content.OPENING_PHRASE,
