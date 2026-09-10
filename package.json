@@ -30,6 +30,7 @@
     "scan": "node bin/scan-leaks.mjs",
     "lint-prompts": "node bin/lint-prompts.mjs --project demo && node bin/lint-prompts.mjs --project fixtures/smoke-project",
     "eval-retrieval": "node bin/eval-retrieval.mjs --project demo",
+    "eval": "node engine/eval.mjs",
     "test": "node --test \"test/**/*.test.mjs\""
   },
   "dependencies": {
