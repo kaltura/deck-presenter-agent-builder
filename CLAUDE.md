@@ -34,6 +34,8 @@ This is architectural, not a gitignore rule (PLAN.md 3): real decks live in sepa
 
 **4. Mutating a live account asks first.** `engine/` runs real, billable, externally visible operations. Every path that reaches a mutating call passes the confirmation gate at PLAN.md 6.5, and that gate lives at the single call site in the engine, not in each caller.
 
+**Deletes are separate and id-only.** `teardown` is its own command, never a flag on `provision` and never a pipeline step. It deletes only ids recorded in `.provisioning-state.json`, never anything matched by name or pattern, and it honors `protected-ids.json`. Full contract at PLAN.md 8.1.
+
 **5. The deployed agent discloses it is an AI, and stores nothing about the audience by default.** Both are on by default and cannot be turned off by editing a branding file (PLAN.md 9, 10).
 
 ## Conventions
@@ -58,7 +60,7 @@ This is architectural, not a gitignore rule (PLAN.md 3): real decks live in sepa
 
 | Path | Holds |
 |---|---|
-| `engine/` | Kaltura API scripts: `provision`, `deploy`, `bundle`, `verify`, `update-*`. Parameterized by `project.json` + `.env`. |
+| `engine/` | Kaltura API scripts: `provision`, `deploy`, `bundle`, `verify`, `teardown`, `update-*`. Parameterized by `project.json` + `.env`. |
 | `client/` | The generic presenter web app. Neutral branding, disclosure line, accessibility defaults. |
 | `templates/prompts/` | Prompt skeletons with `{{PLACEHOLDERS}}`. No real wording. |
 | `templates/project/` | The new-project skeleton `create-project.mjs` copies. |
