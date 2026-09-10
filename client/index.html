@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Presenter</title>
+  <meta name="description" content="An AI-narrated presentation with live avatar Q&amp;A.">
+  <meta name="theme-color" content="#121212">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#presentation-container">Skip to presentation</a>
+
+  <div id="app">
+    <header class="app-header">
+      <div class="header-left">
+        <img class="brand-logo" src="./assets/logo.svg" alt="Presenter logo" width="28" height="28">
+        <p class="disclosure-note">You're talking with an AI avatar, not a human.</p>
+      </div>
+      <div class="header-right">
+        <a id="btn-download-pdf" class="header-pdf-badge" href="#" target="_blank" rel="noopener" aria-label="Open the deck as a PDF in a new tab">
+          <span class="badge-pdf">PDF</span>
+          <span class="header-pdf-label">View the deck</span>
+        </a>
+        <button id="btn-transcript" class="btn btn-icon hidden" type="button" aria-label="Show transcript" title="Show transcript (debug)">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v12H8l-4 4z"/></svg>
+        </button>
+        <button id="btn-clear-memory" class="btn btn-icon hidden" type="button" aria-label="Clear saved memory" title="Clear saved memory (debug)">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+        </button>
+        <span id="version-tag" class="version-tag"></span>
+      </div>
+    </header>
+
+    <div id="start-overlay" class="start-overlay">
+      <div id="welcome-step" class="start-step-panel">
+        <img class="start-logo" src="./assets/logo.svg" alt="" width="48" height="48">
+        <h1 id="welcome-title" class="start-title">AI Presenter</h1>
+        <p id="welcome-subtitle" class="start-tagline">An AI-narrated presentation with live Q&amp;A</p>
+        <p class="disclosure-line" role="note">This experience is presented by an AI avatar. It is not a human, and it cannot make commitments on anyone's behalf.</p>
+
+        <ul class="start-steps-list">
+          <li class="start-step"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>Watch and listen &mdash; the avatar presents the deck for you automatically.</li>
+          <li class="start-step"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M9 15c1 1 2 1.5 3 1.5s2-.5 3-1.5"/></svg>Ask anything &mdash; speak naturally or type, any time.</li>
+          <li class="start-step"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg>Jump to topics &mdash; use the sidebar to skip straight to a section.</li>
+          <li class="start-step"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v3h3"/></svg>View the deck &mdash; open the full PDF any time from the header.</li>
+          <li class="start-step"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16v12H4z"/><path d="M8 10h2v4H8zM14 10h2v4h-2z"/></svg>Captions available &mdash; press C any time for closed captions.</li>
+          <li class="start-step"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg>Timed sessions &mdash; each session runs for a limited time. Start a new one any time to keep going.</li>
+          <li class="start-step"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h11M3 5v14M3 12h9M14 5l7 14M17.5 15h7"/></svg>Speak any language &mdash; ask in the language you're most comfortable with.</li>
+        </ul>
+
+        <button id="btn-privacy" class="btn btn-ghost btn-privacy-trigger" type="button">Privacy details</button>
+
+        <button id="btn-continue" class="btn btn-primary btn-start" type="button">Continue</button>
+      </div>
+
+      <div id="disclaimer-step" class="start-step-panel hidden">
+        <div class="disclaimer-scroll">
+          <h2>Before you begin</h2>
+
+          <h3>AI technology</h3>
+          <p>This presentation is delivered by an AI-powered digital avatar, not a human presenter.</p>
+
+          <h3>No contractual authority</h3>
+          <p>The avatar cannot make commitments, quotes, or promises on behalf of any organization. Treat anything it says as informational, and confirm anything binding with a human contact.</p>
+
+          <h3>No guarantee of accuracy</h3>
+          <p>AI-generated responses may be incomplete or contain errors. Verify anything important independently before relying on it.</p>
+
+          <h3>Data and privacy</h3>
+          <p>See the "Privacy details" link on the welcome screen for what is collected during a session, how it's used, and your rights.</p>
+        </div>
+        <button id="btn-start" class="btn btn-primary btn-start" type="button">I acknowledge, start the session</button>
+      </div>
+    </div>
+
+    <div id="privacy-panel" class="privacy-panel hidden" role="dialog" aria-modal="true" aria-labelledby="privacy-panel-title">
+      <div class="privacy-panel-backdrop"></div>
+      <div class="privacy-panel-content">
+        <button id="btn-close-privacy" class="privacy-panel-close" type="button" aria-label="Close privacy details">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <h3 id="privacy-panel-title">Privacy details</h3>
+        <!-- privacy.controllerName / privacy.controllerContact are not wired through
+             engine/bundle.mjs yet. Until a project.json field exists for them, this
+             stays a bracketed placeholder rather than a guess at real contact details. -->
+        <dl class="privacy-list">
+          <dt>Who is responsible for this data</dt>
+          <dd>[controller name] &mdash; [controller contact]</dd>
+          <dt>What is collected</dt>
+          <dd>By default, no audio or video of you is recorded or stored. Typed and spoken questions are kept only as a session transcript, for this session only.</dd>
+          <dt>Why</dt>
+          <dd>To answer your questions and let the presentation resume where you left off if you return.</dd>
+          <dt>Who sees it</dt>
+          <dd>The AI avatar service that runs this session, and &mdash; only if you choose to submit the contact form &mdash; the team you asked to hear from.</dd>
+          <dt>How long it's kept</dt>
+          <dd>Session transcripts are not retained after the session ends unless this project's owner has configured otherwise.</dd>
+          <dt>Your rights</dt>
+          <dd>You can leave at any time, decline to share your details, and withdraw consent. You have the right to complain to your local data protection supervisory authority.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <nav id="toc-sidebar" class="toc-sidebar collapsed" aria-label="Table of contents">
+      <div class="toc-header">
+        <h2>Contents</h2>
+        <button id="btn-toc-close" class="btn btn-icon" type="button" aria-label="Close table of contents">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div id="toc-content" class="toc-content"></div>
+    </nav>
+
+    <main class="presentation-wrapper">
+      <div id="presentation-container" class="presentation-container">
+        <canvas id="pdf-canvas"></canvas>
+        <div id="annotation-layer" class="annotation-layer"></div>
+
+        <div id="avatar-pip" class="avatar-pip">
+          <div id="avatar-loading" class="avatar-pip-overlay">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="sr-only">Connecting to the avatar&hellip;</span>
+          </div>
+          <div id="avatar-pause-overlay" class="avatar-pip-overlay hidden">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+          </div>
+          <div id="ai-content-label" class="ai-content-label" hidden>
+            <svg viewBox="0 0 20 20" width="16" height="16" role="img" aria-label="AI-generated content">
+              <rect x="0.5" y="0.5" width="19" height="19" rx="5" fill="#111827" stroke="#9ca3af" stroke-width="1"></rect>
+              <text x="10" y="13.5" font-family="system-ui, sans-serif" font-size="8" font-weight="700" fill="#f3f4f6" text-anchor="middle">AI</text>
+              <path d="M15.2 3.6l0.5 1.3 1.3 0.5-1.3 0.5-0.5 1.3-0.5-1.3-1.3-0.5 1.3-0.5z" fill="#9ca3af"></path>
+            </svg>
+            <span>AI-generated content</span>
+          </div>
+        </div>
+
+        <div id="caption-container" class="caption-container hidden" aria-live="polite">
+          <p id="caption-text" class="caption-text"></p>
+        </div>
+
+        <div id="slide-badge" class="slide-badge"></div>
+
+        <div id="chat-log-wrapper" class="chat-log-wrapper">
+          <div id="chat-log" class="chat-log" aria-live="polite"></div>
+          <form id="chat-form" class="chat-form">
+            <input id="chat-input" class="chat-input" type="text" placeholder="Type a question&hellip;" aria-label="Type a question" autocomplete="off">
+            <button class="btn btn-primary btn-send" type="submit" aria-label="Send">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="controls-bar">
+        <button id="btn-toc-toggle" class="btn btn-icon" type="button" aria-label="Open table of contents">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <button id="btn-prev" class="btn btn-icon" type="button" aria-label="Previous slide">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+
+        <div class="progress-wrap">
+          <div id="progress-bar" class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+          <label class="slide-jump-label" for="slide-jump-input">
+            <input id="slide-jump-input" class="slide-jump-input" type="number" min="1" value="1" aria-label="Jump to slide number">
+            <span id="slide-counter" class="slide-counter">/ 1</span>
+          </label>
+        </div>
+
+        <button id="btn-next" class="btn btn-icon" type="button" aria-label="Next slide">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+
+        <button id="btn-pause" class="btn btn-icon" type="button" aria-label="Pause avatar">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+        </button>
+
+        <div id="autoplay-control" class="autoplay-control">
+          <button id="btn-autoplay-toggle" class="btn btn-icon" type="button" aria-label="Toggle autoplay">
+            <svg id="autoplay-ring" class="autoplay-ring" viewBox="0 0 56 56" width="28" height="28">
+              <circle cx="28" cy="28" r="25" fill="none" stroke="var(--color-border)" stroke-width="3"></circle>
+              <circle id="autoplay-ring-progress" cx="28" cy="28" r="25" fill="none" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="157" stroke-dashoffset="157" transform="rotate(-90 28 28)"></circle>
+            </svg>
+            <span id="autoplay-digits" class="autoplay-digits"></span>
+          </button>
+          <span id="autoplay-status" class="sr-only" role="status" aria-live="polite"></span>
+        </div>
+
+        <button id="btn-cc" class="btn btn-icon" type="button" aria-pressed="false" aria-label="Toggle captions">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 10h2v4H8zM14 10h2v4h-2z"/></svg>
+        </button>
+        <button id="btn-mute" class="btn btn-icon" type="button" aria-pressed="false" aria-label="Mute avatar audio">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9v6h4l6 5V4l-6 5H4z"/></svg>
+        </button>
+      </div>
+    </main>
+
+    <aside id="transcript-panel" class="transcript-panel hidden" aria-label="Debug transcript">
+      <div id="transcript-content" class="transcript-content"></div>
+    </aside>
+
+    <div id="status-toast" class="status-toast hidden" role="status" aria-live="polite"></div>
+
+    <div id="contact-modal" class="contact-modal hidden" role="dialog" aria-modal="true" aria-labelledby="contact-modal-title">
+      <div class="contact-modal-backdrop"></div>
+      <div class="contact-modal-content">
+        <h3 id="contact-modal-title">Let's continue the conversation</h3>
+        <p class="contact-modal-subtitle">Leave your details and our team will follow up.</p>
+        <form id="contact-form">
+          <label for="contact-name">Name</label>
+          <input id="contact-name" class="contact-input" type="text" required autocomplete="name">
+          <label for="contact-email">Email</label>
+          <input id="contact-email" class="contact-input" type="email" required autocomplete="email">
+          <label for="contact-company">Company</label>
+          <input id="contact-company" class="contact-input" type="text" autocomplete="organization">
+          <label for="contact-message">Message (optional)</label>
+          <textarea id="contact-message" class="contact-input" rows="3"></textarea>
+          <p class="contact-privacy-note">Your details are shared only with the team you're speaking with.</p>
+          <div class="contact-modal-actions">
+            <button id="btn-contact-skip" class="btn btn-ghost" type="button">Not now</button>
+            <button class="btn btn-primary" type="submit">Send</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="session-ended" class="session-ended hidden">
+      <div class="session-ended-content">
+        <h2 id="session-ended-title">Session ended</h2>
+        <p id="session-ended-message"></p>
+        <button id="btn-restart-session" class="btn btn-primary" type="button">Start a new session</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO" crossorigin="anonymous"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
