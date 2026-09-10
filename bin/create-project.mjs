@@ -60,7 +60,7 @@ async function main() {
     '  copy templates/project/* as the project skeleton',
     '  copy templates/prompts/* into prompts/',
     '  copy client/ (the presenter app) into client/',
-    '  copy engine/ into scripts/',
+    '  copy engine/ into scripts/, plus doctor.mjs at the project root',
     '  copy skills/build-deck-agent/ into .claude/skills/build-deck-agent/ (if built)',
     '  write project.json, package.json, .template-version',
     '  git init (if not already a repo)',
@@ -83,6 +83,11 @@ async function main() {
 
   // ── The engine, parameterized entirely by this project's own project.json + .env ──
   cpSync(resolve(TOOLKIT_ROOT, 'engine'), resolve(targetDir, 'scripts'), { recursive: true });
+
+  // ── The environment/credential preflight, rewritten to import from ./scripts/lib
+  // instead of ../engine/lib since it now lives at the project root, not in bin/. ──
+  const doctorSrc = readFileSync(resolve(TOOLKIT_ROOT, 'bin/doctor.mjs'), 'utf8');
+  writeFileSync(resolve(targetDir, 'doctor.mjs'), doctorSrc.replaceAll('../engine/lib/', './scripts/lib/'));
 
   // ── The pipeline skill, discoverable the moment Claude Code opens this folder ──
   const skillSrc = resolve(TOOLKIT_ROOT, 'skills/build-deck-agent');
