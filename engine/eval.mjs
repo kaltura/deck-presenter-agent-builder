@@ -413,11 +413,21 @@ async function main() {
   }
 }
 
+/** Only the fields the coverage judge actually needs; the full slide record (footnote citations, layout, ids) can be large enough to trip the API's message-length cap on the densest slides. */
+function gradingRelevantSlideData(slide) {
+  return {
+    title: slide?.title,
+    talking_points: slide?.talking_points,
+    key_metrics: slide?.content?.key_metrics,
+    summary: slide?.content?.text || slide?.content?.headline,
+  };
+}
+
 function judgeCoverageRubric(slide, question, actualAnswer) {
   return `Grading task: talking-point coverage and tone.
 
 Slide data (the source of truth):
-${JSON.stringify(slide, null, 2)}
+${JSON.stringify(gradingRelevantSlideData(slide))}
 
 Question asked: ${question}
 
