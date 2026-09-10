@@ -420,13 +420,17 @@ button, input, textarea { font-family: inherit; }
 
 .caption-container {
   position: absolute;
-  left: 50%;
   bottom: var(--caption-bottom);
-  transform: translateX(-50%);
-  max-width: 80%;
+  left: 12.5%;
+  right: 12.5%;
   z-index: 25;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
 }
 .caption-text {
+  display: inline-block;
+  max-width: 100%;
   margin: 0;
   padding: 8px 16px;
   background: rgba(0, 0, 0, 0.75);
@@ -434,6 +438,11 @@ button, input, textarea { font-family: inherit; }
   border-radius: var(--radius-md);
   font-size: 15px;
   text-align: center;
+  white-space: pre-wrap;
+}
+/* :empty hides the pill so nothing shows when there's no active caption text. */
+.caption-text:empty {
+  display: none;
 }
 
 .slide-badge {

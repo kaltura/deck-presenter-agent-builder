@@ -8,7 +8,7 @@ import { parseSections } from './prompt-format.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.9';
+const VERSION = '0.1.10';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -341,12 +341,12 @@ function rememberTyped(text) {
   }
 }
 function consumeTypedEcho(text) {
+  // Do not delete on match: the SDK can emit more than one transcript echo
+  // for the same typed text (e.g. a delayed final-pass echo arriving after
+  // the avatar's answer already rendered). A one-shot delete let that later
+  // echo through as if it were a new, genuine user utterance.
   const key = normalizeTyped(text);
-  if (recentTypedTexts.has(key)) {
-    recentTypedTexts.delete(key);
-    return true;
-  }
-  return false;
+  return recentTypedTexts.has(key);
 }
 function sendTyped(text) {
   const trimmed = text.trim();
@@ -696,12 +696,19 @@ function clampChatLogWrapperPosition() {
   if (rect.bottom > parent.bottom) el.chatLogWrapper.style.top = `${parent.height - rect.height - 8}px`;
 }
 
+// Keeps captions as low as possible (TV-caption style): sits just above the
+// chat log's actual current footprint (collapsed, growing, or dragged away),
+// rather than always reserving room for the chat log's max possible height.
 function updateCaptionOffset() {
-  const pipRect = el.avatarPip.getBoundingClientRect();
-  const containerRect = el.slideWrapper.getBoundingClientRect();
-  const bottomGap = containerRect.bottom - pipRect.top;
-  el.slideWrapper.style.setProperty('--caption-bottom', `${Math.max(84, bottomGap + 12)}px`);
+  clampChatLogWrapperPosition();
+  const slideRect = el.slideWrapper.getBoundingClientRect();
+  const chatRect = el.chatLogWrapper.getBoundingClientRect();
+  const floor = Math.max(16, slideRect.height * 0.03);
+  const dockedToBottom = Math.abs(slideRect.bottom - chatRect.bottom) < 40;
+  const offset = dockedToBottom ? Math.max(floor, slideRect.bottom - chatRect.top + 16) : floor;
+  el.slideWrapper.style.setProperty('--caption-bottom', `${Math.round(offset)}px`);
 }
+new ResizeObserver(() => updateCaptionOffset()).observe(el.chatLogWrapper);
 
 function initChatLogDrag() {
   let dragging = false;
@@ -735,12 +742,14 @@ function initChatLogDrag() {
     el.chatLogWrapper.style.top = `${top}px`;
     el.chatLogWrapper.style.right = 'auto';
     el.chatLogWrapper.style.bottom = 'auto';
+    updateCaptionOffset();
   }
   function onUp() {
     if (dragging && didDrag) suppressClick = true;
     dragging = false;
     el.chatLogWrapper.classList.remove('dragging');
     clampChatLogWrapperPosition();
+    updateCaptionOffset();
   }
 
   el.chatToggle.addEventListener('mousedown', (ev) => onDown(ev.clientX, ev.clientY));
@@ -752,6 +761,7 @@ function initChatLogDrag() {
   el.chatToggle.addEventListener('click', (ev) => {
     if (suppressClick) { suppressClick = false; ev.preventDefault(); return; }
     el.chatLogWrapper.classList.toggle('collapsed');
+    updateCaptionOffset();
   });
 }
 
