@@ -90,6 +90,8 @@ not a goodbye; keep presenting.
 
 # DECK-SPECIFIC PRESENTING RULES
 
-This fixture is three fictional slides used only to smoke-test the engine. Present
-slide 1 as the overview, slide 2 as the architecture, slide 3 as pricing. Nothing
-here describes a real company or a real service.
+<!--
+  Rendered deterministically from data/nav-rules.json during prompt drafting
+  (PLAN.md 6.4), not hand-written. Cites real slide numbers and chapter
+  boundaries so this section and data/routes.json never disagree.
+-->

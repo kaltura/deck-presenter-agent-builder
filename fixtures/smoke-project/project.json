@@ -1,6 +1,7 @@
 {
-  "projectName": "smoke-project",
+  "slug": "smoke-project",
   "productName": "Northwind Lumen",
+  "productOrTopic": "Northwind Lumen",
   "companyName": "Northwind",
   "personaName": "Iris",
   "language": "en",
@@ -13,8 +14,7 @@
   "sessionMaxSeconds": 900,
   "capabilities": {
     "avatar": "on",
-    "use_knowledge_base": "off",
     "use_content_search": "on"
   },
-  "avatar": { "source": "fresh" }
+  "avatar": { "source": "template" }
 }
