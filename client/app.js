@@ -3,6 +3,8 @@ import { KalturaAvatarSession, CaptionService } from '@kaltura/intelligent-agent
 import { Presenter } from '@kaltura/intelligent-agents/experience/presenter';
 import { createNoiseSuppressor } from '@kaltura/intelligent-agents/experience/noise-suppressor';
 import { parseSections } from './prompt-format.js';
+import { normalizeTyped, typedTextsMatch } from './echo-match.js';
+import { isWithinCooldown } from './nav-cooldown.js';
 
 // ── Config (bundle.mjs rewrites these four before esbuild runs) ──
 const PARTNER_ID = 0;
@@ -22,8 +24,14 @@ const GOODBYE_GRACE_MS = 45000;
 const GOODBYE_PHRASE_RE = /\b(good ?bye|bye+!?|see ya|farewell|that'?s all|i'?m done|gotta go|talk later)\b/i;
 const APP_MARKERS = [NAV_NUDGE_PREFIX, RESUME_CUE_PREFIX, '[NAV HINT:', CONTACT_FORM_PREFIX];
 const CONTACT_COOLDOWN_MS = 60000;
+const NAV_BLOCK_AFTER_CONTACT_MS = 2500;
 const CHAT_LOG_IDLE_MS = 12000;
 const TYPED_ECHO_WINDOW_MS = 60000;
+// A typed question sent while the avatar is mid-sentence, or in the first
+// second of a new slide's narration, can sit unprocessed on the server with
+// no echo back. Resend once if no echo (or a brain stall) arrives within
+// this window. 20s, not a few seconds: a real echo round trip can be slow.
+const TYPED_ECHO_TIMEOUT_MS = 20000;
 
 const stripAppText = (t) => {
   let out = t || '';
@@ -232,7 +240,8 @@ let pendingNavNudge = null;
 let resumeSlide = 0;
 let pendingResume = 0;
 const cleanInterests = (list) => Array.isArray(list) ? [...new Set(list.map((s) => String(s).trim()).filter(Boolean))].slice(0, 12) : [];
-const recentTypedTexts = new Map();
+let recentTypedTexts = []; // { norm, at } of texts the user typed; the server echoes them back as 'user' transcripts
+let awaitingTyped = null; // { norm, payload, resent } for the typed question still waiting on its echo
 let sessionEnded = false;
 let goodbyePending = false;
 let goodbyeGraceTimer = null;
@@ -367,33 +376,47 @@ function routeHint(text) {
 }
 
 // ── Typed-question echo/resend robustness ──
-function normalizeTyped(text) {
-  return (text || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
 function rememberTyped(text) {
-  const key = normalizeTyped(text);
-  recentTypedTexts.set(key, Date.now());
-  for (const [k, at] of recentTypedTexts) {
-    if (Date.now() - at > TYPED_ECHO_WINDOW_MS) recentTypedTexts.delete(k);
-  }
+  const now = Date.now();
+  recentTypedTexts = recentTypedTexts.filter((t) => now - t.at < TYPED_ECHO_WINDOW_MS);
+  recentTypedTexts.push({ norm: normalizeTyped(text), at: now });
 }
+// True when a 'user' transcript is the server echoing text we already showed on Send.
 function consumeTypedEcho(text) {
-  // Do not delete on match: the SDK can emit more than one transcript echo
-  // for the same typed text (e.g. a delayed final-pass echo arriving after
-  // the avatar's answer already rendered). A one-shot delete let that later
-  // echo through as if it were a new, genuine user utterance.
-  const key = normalizeTyped(text);
-  return recentTypedTexts.has(key);
+  const norm = normalizeTyped(text);
+  if (!norm) return false;
+  const now = Date.now();
+  const idx = recentTypedTexts.findIndex((t) => now - t.at < TYPED_ECHO_WINDOW_MS && typedTextsMatch(t.norm, norm));
+  if (idx === -1) return false;
+  recentTypedTexts.splice(idx, 1);
+  return true;
+}
+function resendTyped(reason) {
+  if (!awaitingTyped || awaitingTyped.resent || !session || sessionEnded || contactModalOpen) return;
+  awaitingTyped.resent = true;
+  addDebugEntry(`resend (${reason}): ${awaitingTyped.payload.slice(0, 60)}`);
+  speakInterrupting(awaitingTyped.payload);
+}
+function resendIfStalled(count) {
+  if (count !== 1) return;
+  resendTyped('brain stalled');
 }
 function sendTyped(text) {
+  if (!session || sessionEnded) return;
   const trimmed = text.trim();
   if (!trimmed) return;
   rememberTyped(trimmed);
   const hint = routeHint(trimmed);
   const payload = hint ? `${trimmed}\n${hint}` : trimmed;
+  const pending = { norm: normalizeTyped(trimmed), payload, resent: false };
+  awaitingTyped = pending;
   appendChatMessage(trimmed, 'user');
   speakInterrupting(payload);
   markUserInteraction();
+  setTimeout(() => {
+    if (awaitingTyped !== pending) return;
+    resendTyped('no echo');
+  }, TYPED_ECHO_TIMEOUT_MS);
 }
 // KalturaAvatarSession has no sendText(): typed/nudge text goes through speak(),
 // and a mid-utterance send needs interrupt() first or the server queues it behind
@@ -483,6 +506,7 @@ function updateSlideUI(n) {
 }
 
 function onSlideChange(n, reason) {
+  deckPausedAfterGoodbye = false;
   updateSlideUI(n);
   if (reason === 'resume') pendingResume = 0;
   const nudgeReason = pendingNavNudge || reason || 'default';
@@ -547,15 +571,17 @@ new ResizeObserver(debounce(() => renderPage(currentSlideNum), 100)).observe(el.
 // ── Contact form ──
 function openContactModal(reason) {
   if (!TOOL_NAMES.contact || contactModalOpen || contactSubmitted) return;
-  if (Date.now() - contactClosedAt < CONTACT_COOLDOWN_MS) return;
+  if (isWithinCooldown(contactClosedAt, Date.now(), CONTACT_COOLDOWN_MS)) return;
   contactModalOpen = true;
   pauseAvatarForForm();
   el.contactModal.classList.remove('hidden');
   addDebugEntry(`contact form opened (${reason})`);
+  awaitingTyped = null; // the request that opened the form was answered by the tool call: no resend
 }
 function pauseAvatarForForm() {
   micPausedForForm = true;
   session?.pauseMic?.();
+  try { session?.interrupt?.(); } catch { /* not connected: nothing to interrupt */ }
 }
 function closeContactModal() {
   contactModalOpen = false;
@@ -601,7 +627,9 @@ function cancelGoodbyeGrace() {
   if (!goodbyePending) return;
   clearTimeout(goodbyeGraceTimer);
   goodbyePending = false;
-  deckPausedAfterGoodbye = false;
+  // deckPausedAfterGoodbye stays set: canceling the grace period only means
+  // the goodbye didn't stick, not that the viewer re-engaged. Only a real
+  // slide navigation (onSlideChange) should let autoplay resume.
 }
 
 function showSessionEnded(reason) {
@@ -868,6 +896,7 @@ async function initAvatar() {
   const presenterGoTo = presenter.goTo.bind(presenter);
   presenter.goTo = (n, reason = 'user') => {
     if (contactModalOpen) return;
+    if (isWithinCooldown(contactClosedAt, Date.now(), NAV_BLOCK_AFTER_CONTACT_MS)) return;
     if (resumeTarget() && reason !== 'resume') {
       const target = resumeTarget();
       pendingResume = 0;
@@ -956,16 +985,18 @@ function registerSessionEvents(sess) {
     if (type === 'user') {
       // The SDK can batch a typed question together with a subsequent
       // app-injected speak() (a nav nudge, resume cue, etc.) into one
-      // combined "user" turn. That combined text won't match the plain
-      // typed-echo key, so check for an app marker too: any app-generated
-      // instruction text was never real audience input and must not
-      // render as a chat bubble, whether it arrives alone or appended to
-      // text the local echo in sendTyped() already displayed.
-      const hasAppMarker = APP_MARKERS.some((marker) => text.includes(marker));
-      if (hasAppMarker || consumeTypedEcho(text)) return;
-      appendChatMessage(text, 'user');
+      // combined "user" turn, so strip our own instruction text first: an
+      // app-only turn strips to nothing and is never real audience input.
+      const viewerText = stripAppText(text);
+      if (!viewerText) return;
+      if (consumeTypedEcho(viewerText)) {
+        // Already shown as a bubble when the user hit Send.
+        if (awaitingTyped && typedTextsMatch(normalizeTyped(viewerText), awaitingTyped.norm)) awaitingTyped = null;
+        return;
+      }
+      appendChatMessage(viewerText, 'user');
       markUserInteraction();
-      if (TOOL_NAMES.endSession && GOODBYE_PHRASE_RE.test(text)) handleGoodbye();
+      if (TOOL_NAMES.endSession && GOODBYE_PHRASE_RE.test(viewerText)) handleGoodbye();
       else cancelGoodbyeGrace();
     } else {
       lastAvatarTextEndedWithQuestion = /\?\s*$/.test(text.trim());
@@ -985,10 +1016,10 @@ function registerSessionEvents(sess) {
 
   sess.on('reconnecting', () => showToast('Reconnecting…', 'warn'));
   sess.on('reconnected', () => showToast('Reconnected.', 'info'));
-  sess.on('brainStalled', () => {
-    addDebugEntry('brain stalled — resending resume instruction');
-    speakInterrupting(`${RESUME_CUE_PREFIX} You stalled mid-response. In one short sentence, resume where you left off on slide ${currentSlideNum}. Do not navigate to a different slide.`);
-  });
+  // No dedicated E2E test: forcing a live backend stall on demand isn't
+  // possible from the client. resendIfStalled/resendTyped share their guards
+  // (count === 1, awaitingTyped.resent) with the client-pure.test.mjs coverage.
+  sess.on('brainStalled', ({ count }) => resendIfStalled(count));
   sess.on('capacityChanged', () => {});
   sess.on('toolSpiralDetected', () => addDebugEntry('tool spiral detected'));
   sess.on('toolSpiralRecovering', () => addDebugEntry('tool spiral recovering'));
@@ -1071,10 +1102,18 @@ function bindEvents() {
   el.btnClearMemory.addEventListener('click', () => { presenter?.clearMemory?.(); showToast('Memory cleared.', 'info'); });
 
   document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') {
+      if (document.activeElement === el.chatInput) el.chatInput.blur();
+      else el.transcriptPanel.classList.add('hidden');
+      return;
+    }
     if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA') return;
     if (ev.key === 'c' || ev.key === 'C') el.btnCc.click();
+    if (ev.key === 't' || ev.key === 'T') el.btnTranscript.click();
     if (ev.key === 'ArrowRight') el.btnNext.click();
     if (ev.key === 'ArrowLeft') el.btnPrev.click();
+    if (ev.key === 'Home') { markUserInteraction(); goToSlide(1, 'user'); }
+    if (ev.key === 'End') { markUserInteraction(); goToSlide(totalSlides(), 'user'); }
     if (ev.key === ' ') { ev.preventDefault(); togglePause(); }
   });
 

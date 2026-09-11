@@ -11,7 +11,8 @@ const CONTENT_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 
  */
 export function serveDir(dir, port) {
   const server = createServer(async (req, res) => {
-    const path = req.url === '/' ? '/dist.html' : req.url;
+    const url = req.url === '/' ? '/dist.html' : req.url;
+    const path = url.split('?')[0];
     try {
       const body = await readFile(resolve(dir, `.${path}`));
       res.writeHead(200, { 'Content-Type': CONTENT_TYPES[extname(path)] || 'application/octet-stream' });
