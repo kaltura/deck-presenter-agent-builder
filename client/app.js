@@ -591,7 +591,11 @@ function onSlideChange(n, reason) {
 // ── PDF rendering ──
 async function loadPDF() {
   try {
-    const loadingTask = window.pdfjsLib.getDocument(PDF_URL);
+    // Debug-only override so the E2E suite can point rendering at a scratch PDF
+    // fixture without touching the deck the avatar actually knows about.
+    const params = new URLSearchParams(window.location.search);
+    const url = params.has('debug') && params.get('pdf') ? params.get('pdf') : PDF_URL;
+    const loadingTask = window.pdfjsLib.getDocument(url);
     pdfDoc = await loadingTask.promise;
     el.slideJumpInput.max = String(totalSlides());
     await renderPage(currentSlideNum);
@@ -631,8 +635,51 @@ async function renderPage(n) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     currentRenderTask = page.render({ canvasContext: ctx, viewport });
     await currentRenderTask.promise;
+    if (generation !== renderGeneration) return;
+    await renderAnnotations(page, viewport);
   } catch (err) {
     if (err?.name !== 'RenderingCancelledException') addDebugEntry(`Render failed: ${err.message}`);
+  }
+}
+
+async function renderAnnotations(page, viewport) {
+  el.annotationLayer.innerHTML = '';
+  el.annotationLayer.style.width = `${Math.floor(viewport.width)}px`;
+  el.annotationLayer.style.height = `${Math.floor(viewport.height)}px`;
+  const annotations = await page.getAnnotations();
+  for (const ann of annotations) {
+    if (ann.subtype !== 'Link') continue;
+    const rect = window.pdfjsLib.Util.normalizeRect(ann.rect);
+    const [x1, y1] = viewport.convertToViewportPoint(rect[0], rect[1]);
+    const [x2, y2] = viewport.convertToViewportPoint(rect[2], rect[3]);
+    const a = document.createElement('a');
+    a.style.position = 'absolute';
+    a.style.left = `${Math.min(x1, x2)}px`;
+    a.style.top = `${Math.min(y1, y2)}px`;
+    a.style.width = `${Math.abs(x2 - x1)}px`;
+    a.style.height = `${Math.abs(y2 - y1)}px`;
+    if (ann.url) {
+      a.href = ann.url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+    } else if (ann.dest) {
+      a.href = '#';
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          const dest = typeof ann.dest === 'string' ? await pdfDoc.getDestination(ann.dest) : ann.dest;
+          const ref = dest?.[0];
+          if (!ref) return;
+          const idx = await pdfDoc.getPageIndex(ref);
+          goToSlide(idx + 1, 'pdf_link');
+        } catch (err) {
+          addDebugEntry(`Internal link resolution failed: ${err.message}`);
+        }
+      });
+    } else {
+      continue;
+    }
+    el.annotationLayer.appendChild(a);
   }
 }
 

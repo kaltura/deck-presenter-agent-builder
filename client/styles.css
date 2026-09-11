@@ -320,6 +320,7 @@ button, input, textarea { font-family: inherit; }
 .slide-wrapper { position: relative; display: inline-block; }
 #pdf-canvas { display: block; }
 .annotation-layer { position: absolute; inset: 0; pointer-events: none; }
+.annotation-layer a { pointer-events: auto; }
 
 .avatar-pip {
   position: absolute;

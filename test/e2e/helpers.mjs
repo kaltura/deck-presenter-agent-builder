@@ -1,8 +1,8 @@
 // Shared across *.e2e.mjs files. Not matched by playwright.config.mjs's testMatch itself.
 import { expect } from '@playwright/test';
 
-export async function startSession(page) {
-  await page.goto('/dist.html');
+export async function startSession(page, query = '') {
+  await page.goto(`/dist.html${query}`);
   await page.click('#btn-continue');
   await page.click('#btn-start');
 }
