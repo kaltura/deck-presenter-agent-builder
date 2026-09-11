@@ -35,5 +35,8 @@
     "transcriptRetention": "none",
     "retentionDays": 0,
     "reuseForEval": false
+  },
+  "overrides": {
+    "acknowledgeWarnings": []
   }
 }

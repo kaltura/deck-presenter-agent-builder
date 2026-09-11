@@ -58,13 +58,15 @@ let BRANDING = {
 };
 
 // Optional per-project chapter grouping ({label, start, end}[]) for the table
-// of contents. No project.json field or bundler wiring exists yet, so this
-// stays empty and buildTOC() falls back to one flat list of every slide.
+// of contents, remapped by bundle.mjs from project.json's chapters field.
+// Empty when a project declares no chapters, and buildTOC() then falls back
+// to one flat list of every slide.
 let CHAPTERS = [];
 
 // Optional topic -> slide routing hints for typed questions that don't match
-// any nav-tool call. No project.json field or bundler wiring exists yet, so
-// this stays empty and routeHint() is a no-op until it's populated.
+// any nav-tool call, remapped by bundle.mjs from data/routes.json (itself a
+// deterministic render of data/nav-rules.json). Empty when a project has no
+// topic-tagged nav rules, and routeHint() is then a no-op.
 let TOPIC_ROUTES = [];
 
 // Context handed to the SDK's Presenter for prompt-building. No project.json
@@ -72,11 +74,29 @@ let TOPIC_ROUTES = [];
 let PRESENTER_CONTEXT = {};
 
 // Whether the avatar's voice/likeness is a fresh synthetic build ('fresh') or
-// cloned from a real person's recorded voice/likeness ('cloned'). Drives the
-// synthetic-content label (PLAN.md 10). No project.json field or bundler
-// wiring exists yet — bundle.mjs never rewrites this, so it stays 'fresh'
-// until that wiring exists.
+// cloned from a real person's recorded voice/likeness ('cloned'), rewritten by
+// bundle.mjs from project.json avatar.source. Drives the synthetic-content
+// label (PLAN.md 10).
 let AVATAR_SOURCE = 'fresh';
+
+// The AI-disclosure line's text, rewritten by bundle.mjs from project.json
+// disclosure.text (falling back to the toolkit default when that's blank).
+let DISCLOSURE_TEXT = "This experience is presented by an AI avatar. It is not a human, and it cannot make commitments on anyone's behalf.";
+
+// Who to show in the privacy panel as responsible for audience data,
+// rewritten by bundle.mjs from project.json's privacy fields.
+let PRIVACY = { controllerName: '', controllerContact: '' };
+
+// Where, besides the persistent chrome label, to additionally show the
+// synthetic-content label when AVATAR_SOURCE is 'cloned'. Rewritten by
+// bundle.mjs from project.json avatar.syntheticLabelPlacement. Only 'welcome'
+// is supported today.
+let SYNTHETIC_LABEL_PLACEMENT = [];
+
+// True only when avatar.source is 'cloned' and the project owner explicitly
+// acknowledged suppressing the synthetic-content label (project.json
+// overrides.acknowledgeWarnings). Rewritten by bundle.mjs.
+let SUPPRESS_SYNTHETIC_LABEL = false;
 
 let CAPTION_REPLACEMENT_RULES = [];
 function buildCaptionRules() {
@@ -109,11 +129,14 @@ const el = {
   disclaimerStep: document.getElementById('disclaimer-step'),
   welcomeTitle: document.getElementById('welcome-title'),
   welcomeSubtitle: document.getElementById('welcome-subtitle'),
+  disclosureLine: document.getElementById('disclosure-line'),
+  aiContentLabelWelcome: document.getElementById('ai-content-label-welcome'),
   btnContinue: document.getElementById('btn-continue'),
   btnStart: document.getElementById('btn-start'),
 
   btnPrivacy: document.getElementById('btn-privacy'),
   privacyPanel: document.getElementById('privacy-panel'),
+  privacyController: document.getElementById('privacy-controller'),
   btnClosePrivacy: document.getElementById('btn-close-privacy'),
 
   tocSidebar: document.getElementById('toc-sidebar'),
@@ -258,8 +281,22 @@ function applyBranding() {
   document.title = BRANDING.welcomeTitle;
 }
 
+function applyDisclosure() {
+  if (el.disclosureLine) el.disclosureLine.textContent = DISCLOSURE_TEXT;
+}
+
+function applyPrivacy() {
+  if (!el.privacyController) return;
+  const { controllerName, controllerContact } = PRIVACY;
+  el.privacyController.textContent = `${controllerName || '[controller name]'} - ${controllerContact || '[controller contact]'}`;
+}
+
 function applyAvatarSourceLabel() {
-  el.aiContentLabel.hidden = AVATAR_SOURCE !== 'cloned';
+  const showLabel = AVATAR_SOURCE === 'cloned' && !SUPPRESS_SYNTHETIC_LABEL;
+  el.aiContentLabel.hidden = !showLabel;
+  if (el.aiContentLabelWelcome) {
+    el.aiContentLabelWelcome.hidden = !(showLabel && SYNTHETIC_LABEL_PLACEMENT.includes('welcome'));
+  }
 }
 
 // ── Table of contents ──
@@ -1046,7 +1083,6 @@ function bindEvents() {
 
 // ── Boot ──
 async function init() {
-  applyBranding();
   el.btnDownloadPdf.href = PDF_URL;
 
   const debugMode = new URLSearchParams(window.location.search).has('debug');
@@ -1061,6 +1097,9 @@ async function init() {
     document.body.innerHTML = `<div style="padding:40px;font-family:sans-serif;color:#fff;">Failed to load presentation data: ${err.message}</div>`;
     return;
   }
+  applyBranding();
+  applyDisclosure();
+  applyPrivacy();
   buildCaptionRules();
   applyAvatarSourceLabel();
 

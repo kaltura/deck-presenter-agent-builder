@@ -10,7 +10,7 @@ This is `deck-presenter-agent-builder`: a public toolkit that turns a deck plus 
 | `docs/implementation-appendix.md` | The concrete Kaltura API contract. Read before touching `engine/`. |
 | `port/README.md` | Working reference code, staged locally and gitignored. Read this before writing any `engine/` or `client/` file. |
 
-Current state: the design, the safety toolchain, and the porting source are in place. `engine/`, `client/`, `templates/`, `skills/`, `bin/create-project.mjs`, and `demo/` do not exist yet. **The entry point is PLAN.md section 13, Phase 0.**
+Current state: implemented and tested. `engine/`, `client/`, `templates/`, `skills/`, `bin/`, `demo/`, and `test/` all exist. Run `npm run scan && npm test` before and after any change.
 
 ## Port, do not reinvent
 

@@ -24,13 +24,27 @@ import esbuild from 'esbuild';
 import { parseFlags, projectRootFrom, progress, result, fail, EXIT, runMain } from './lib/cli.mjs';
 import { parseSections } from '../client/prompt-format.js';
 import { loadState } from './lib/state.mjs';
-import { loadCredentials } from './lib/env.mjs';
+import { loadCredentials, parseEnvFile } from './lib/env.mjs';
 import { loadContent } from './lib/load-content.mjs';
 import { buildCaptionMap } from './lib/caption-map.mjs';
+import { scanForEnvLeaks } from './lib/env-leak-scan.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TOOLKIT_ROOT = resolve(__dirname, '..');
 const WIDGET_PLACEHOLDER = 'WIDGET_ID_UNSET';
+
+// Same text as client/index.html's hardcoded disclosure line: the fallback
+// used when project.json disclosure.text is blank.
+const DEFAULT_DISCLOSURE_TEXT = "This experience is presented by an AI avatar. It is not a human, and it cannot make commitments on anyone's behalf.";
+
+// Env keys the bundler intentionally bakes into the client: widget id, and the
+// service URL, which is just the SDK's own public default endpoint, not a leak.
+const ENV_LEAK_SCAN_EXCLUDE_KEYS = ['KALTURA_WIDGET_ID', 'KALTURA_PARTNER_ID', 'KALTURA_SERVICE_URL'];
+
+// Valid values for project.json avatar.syntheticLabelPlacement. "openingPhrase"
+// is a real future option but touches prompt generation (content.mjs,
+// update-avatar.mjs), so it's deferred rather than implemented here.
+const SYNTHETIC_LABEL_PLACEMENT_VALUES = ['welcome'];
 
 function readJson(path) {
   try {
@@ -40,11 +54,57 @@ function readJson(path) {
   }
 }
 
+/**
+ * Warn-and-proceed checks over project.json. Per the project owner's direction,
+ * the builder recommends but never blocks on these. A project silences a
+ * specific warning by adding its id to project.json overrides.acknowledgeWarnings.
+ */
+export function checkBundleWarnings(project) {
+  const acknowledged = new Set(project.overrides?.acknowledgeWarnings || []);
+  const warn = (id, message) => {
+    if (acknowledged.has(id)) {
+      console.error(`[bundle] "${id}" warning acknowledged in project.json overrides.acknowledgeWarnings. Proceeding.`);
+    } else {
+      console.error(`[bundle] warning (${id}): ${message}`);
+    }
+  };
+
+  if (!project.disclosure?.text?.trim()) {
+    warn('disclosure', 'project.json disclosure.text is empty. The bundle falls back to the toolkit default disclosure line. Set disclosure.text, or add "disclosure" to overrides.acknowledgeWarnings if this is intentional.');
+  }
+
+  if (!project.privacy?.controllerName?.trim() || !project.privacy?.controllerContact?.trim()) {
+    warn('privacyContact', 'project.json privacy.controllerName or privacy.controllerContact is empty. The privacy panel will show a placeholder. Set both fields, or add "privacyContact" to overrides.acknowledgeWarnings if this is intentional.');
+  }
+
+  const sessionMaxSeconds = project.sessionMaxSeconds;
+  const statedCopy = [project.branding?.welcomeSubtitle, project.disclosure?.text].filter(Boolean).join(' ');
+  const durationMatch = statedCopy.match(/(\d+)\s*(hour|minute)s?\b/i);
+  if (durationMatch && typeof sessionMaxSeconds === 'number') {
+    const statedSeconds = Number(durationMatch[1]) * (/hour/i.test(durationMatch[2]) ? 3600 : 60);
+    if (statedSeconds > sessionMaxSeconds) {
+      warn('sessionDuration', `Welcome copy states a duration ("${durationMatch[0]}") longer than sessionMaxSeconds (${sessionMaxSeconds}s). Update the copy or sessionMaxSeconds, or add "sessionDuration" to overrides.acknowledgeWarnings if this is intentional.`);
+    }
+  }
+
+  if (project.avatar?.source === 'cloned') {
+    warn('syntheticLabel', 'avatar.source is "cloned". The synthetic-content label shows by default, disclosing that the avatar\'s voice/likeness is a recreation. Add "syntheticLabel" to overrides.acknowledgeWarnings to suppress it.');
+  }
+
+  const unknownPlacements = (project.avatar?.syntheticLabelPlacement || []).filter((p) => !SYNTHETIC_LABEL_PLACEMENT_VALUES.includes(p));
+  if (unknownPlacements.length) {
+    console.error(`[bundle] warning: project.json avatar.syntheticLabelPlacement has unrecognized value(s): ${unknownPlacements.join(', ')}. Valid values: ${SYNTHETIC_LABEL_PLACEMENT_VALUES.join(', ')}. Ignoring them and continuing.`);
+  }
+}
+
 export async function bundle(projectRoot, { pdfUrl, widgetId, partnerId } = {}) {
   const clientDir = resolve(TOOLKIT_ROOT, 'client');
   const css = readFileSync(resolve(clientDir, 'styles.css'), 'utf8');
   const jsSource = readFileSync(resolve(clientDir, 'app.js'), 'utf8');
   let html = readFileSync(resolve(clientDir, 'index.html'), 'utf8');
+
+  const project = readJson(resolve(projectRoot, 'project.json'));
+  checkBundleWarnings(project);
 
   // ── Resolve widget/partner ids: explicit arg > this project's own state/.env ──
   if (!widgetId) widgetId = loadState(projectRoot)?.steps?.widgetId?.value ? String(loadState(projectRoot).steps.widgetId.value) : '';
@@ -130,8 +190,37 @@ export async function bundle(projectRoot, { pdfUrl, widgetId, partnerId } = {}) 
   const captionMap = existsSync(guidePath) ? buildCaptionMap(readFileSync(guidePath, 'utf8')) : {};
 
   // ── Branding: optional per-project override on top of the neutral defaults in app.js ──
-  const project = readJson(resolve(projectRoot, 'project.json'));
   const branding = project.branding || {};
+
+  // ── Chapters: project.json chapters ({title,range}[]) remapped to the client's {label,start,end}[] ──
+  const chapters = (project.chapters || []).map((c) => ({ label: c.title, start: c.range[0], end: c.range[1] }));
+  if (chapters.length) {
+    const uncovered = expected.filter((n) => !chapters.some((c) => n >= c.start && n <= c.end));
+    if (uncovered.length) throw new Error(`project.json chapters do not cover every slide. Uncovered: ${uncovered.join(', ')}`);
+  }
+
+  // ── Topic routing: data/routes.json, a deterministic render of data/nav-rules.json
+  // (bin/render-routes.mjs). Absence means this project has no topic routing configured. ──
+  const routesPath = resolve(projectRoot, 'data', 'routes.json');
+  const routes = existsSync(routesPath) ? readJson(routesPath) : [];
+  const topicRoutes = routes.map((r) => {
+    if (typeof r.entrySlide !== 'number' || r.entrySlide < 1 || r.entrySlide > total) {
+      throw new Error(`data/routes.json topic "${r.topic}" has entrySlide ${JSON.stringify(r.entrySlide)}, which is not a real slide. Re-render with bin/render-routes.mjs.`);
+    }
+    return { keywords: [r.topic, ...(r.aliases || [])].map((k) => String(k).toLowerCase()), slide: r.entrySlide };
+  });
+
+  // ── Disclosure, privacy, and avatar-source label placement: all warn-and-proceed
+  // (checkBundleWarnings above), never blocked. ──
+  const disclosureText = project.disclosure?.text?.trim() || DEFAULT_DISCLOSURE_TEXT;
+  const privacy = {
+    controllerName: project.privacy?.controllerName || '',
+    controllerContact: project.privacy?.controllerContact || '',
+  };
+  const avatarSource = project.avatar?.source || 'fresh';
+  const syntheticLabelPlacement = (project.avatar?.syntheticLabelPlacement || []).filter((p) => SYNTHETIC_LABEL_PLACEMENT_VALUES.includes(p));
+  const acknowledgedWarnings = new Set(project.overrides?.acknowledgeWarnings || []);
+  const suppressSyntheticLabel = avatarSource === 'cloned' && acknowledgedWarnings.has('syntheticLabel');
 
   const inlineData = (
     '\n  // ── Inlined slide data (bundled from data/slides/*.json — DO NOT EDIT dist.html) ──\n' +
@@ -143,7 +232,17 @@ export async function bundle(projectRoot, { pdfUrl, widgetId, partnerId } = {}) 
     '\n  // ── Inlined caption map (bundled from prompts/pronunciation-guide.md — DO NOT EDIT dist.html) ──\n' +
     `  CAPTION_MAP = ${JSON.stringify(captionMap)};\n` +
     '\n  // ── Inlined branding override (bundled from project.json branding — DO NOT EDIT dist.html) ──\n' +
-    `  BRANDING = Object.assign({}, BRANDING, ${JSON.stringify(branding)});\n`
+    `  BRANDING = Object.assign({}, BRANDING, ${JSON.stringify(branding)});\n` +
+    '\n  // ── Inlined chapters (bundled from project.json chapters — DO NOT EDIT dist.html) ──\n' +
+    `  CHAPTERS = ${JSON.stringify(chapters)};\n` +
+    '\n  // ── Inlined topic routes (bundled from data/routes.json — DO NOT EDIT dist.html) ──\n' +
+    `  TOPIC_ROUTES = ${JSON.stringify(topicRoutes)};\n` +
+    '\n  // ── Inlined disclosure, privacy, and avatar-source label data (bundled from project.json — DO NOT EDIT dist.html) ──\n' +
+    `  DISCLOSURE_TEXT = ${JSON.stringify(disclosureText)};\n` +
+    `  PRIVACY = ${JSON.stringify(privacy)};\n` +
+    `  AVATAR_SOURCE = ${JSON.stringify(avatarSource)};\n` +
+    `  SYNTHETIC_LABEL_PLACEMENT = ${JSON.stringify(syntheticLabelPlacement)};\n` +
+    `  SUPPRESS_SYNTHETIC_LABEL = ${JSON.stringify(suppressSyntheticLabel)};\n`
   );
   const loadStart = js.indexOf('async function loadData()');
   if (loadStart === -1) throw new Error("Could not find 'async function loadData()' in app.js");
@@ -215,6 +314,17 @@ export async function bundle(projectRoot, { pdfUrl, widgetId, partnerId } = {}) 
   if (widgetId && !html.includes(widgetId)) errors.push('widgetId was not baked into the bundled output');
   if (errors.length) throw new Error(`Bundle validation failed, dist.html not written:\n  ${errors.join('\n  ')}`);
 
+  // ── .env leak scan: unconditional, no override. Scans the in-memory string
+  // so a caught leak never touches disk. ──
+  const envPath = resolve(projectRoot, '.env');
+  if (existsSync(envPath)) {
+    const envValues = parseEnvFile(readFileSync(envPath, 'utf8'));
+    const leakedKeys = scanForEnvLeaks(html, envValues, { excludeKeys: ENV_LEAK_SCAN_EXCLUDE_KEYS });
+    if (leakedKeys.length) {
+      throw new Error(`Bundle would leak .env value(s) into dist.html, dist.html not written. Leaked keys: ${leakedKeys.join(', ')}. Remove the value from client-facing data, or rename the key if it should never reach the bundle.`);
+    }
+  }
+
   // ── Write output atomically ──
   const distPath = resolve(projectRoot, 'dist.html');
   const tmpOut = `${distPath}.tmp-${process.pid}`;
@@ -242,4 +352,7 @@ async function main() {
   }
 }
 
-runMain(main);
+// Guarded: deploy.mjs imports bundle() from this file. Without this guard,
+// importing this module for that export also ran this CLI's own main() with
+// the importer's argv, as an unintended side effect.
+if (import.meta.url === `file://${process.argv[1]}`) runMain(main);

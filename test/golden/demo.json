@@ -20,11 +20,21 @@
       },
       {
         "when": "the visitor asks about results, case studies, or Fernvale Orchards",
-        "goToSlide": 8
+        "goToSlide": 8,
+        "topic": "case-study",
+        "aliases": [
+          "results",
+          "fernvale"
+        ]
       },
       {
         "when": "the visitor asks about price or cost",
-        "goToSlide": 9
+        "goToSlide": 9,
+        "topic": "pricing",
+        "aliases": [
+          "cost",
+          "price"
+        ]
       },
       {
         "when": "the visitor wants to leave contact details or talk to a person",

@@ -4,9 +4,9 @@ Turn a deck into a live AI presenter agent. Drop in a PDF and speaker notes, ans
 
 Built on Kaltura's agent platform. You need a Kaltura account; you do not need to know its API.
 
-> **Status: planning complete, not yet implemented.** `PLAN.md` is the design. Nothing runs yet.
+> **Status: implemented and tested.** `PLAN.md` is the design this repo follows; `npm test` and `npm run scan` are green. See `CLAUDE.md` for how to work on it.
 
-## How it will work
+## How it works
 
 ```
 npx deck-presenter-agent-builder create my-deck
@@ -29,7 +29,7 @@ This repo is a **template, not a workspace**. It holds the engine, a generic pre
 - Live captions, keyboard operation, a pause control, and a visible mute. WCAG 2.2 AA is the target.
 - Cloning a real person's voice or face requires a consent record in your project repo before the tool will do it.
 
-These are safe defaults, not a compliance guarantee. `docs/transparency-and-consent.md` covers what you still own.
+These are safe defaults, not a compliance guarantee, and every one of them (except the `.env` secret-leak scan) can be overridden. See `docs/transparency-and-consent.md` for what you still own if you do.
 
 ## Requirements
 
@@ -41,6 +41,7 @@ Node 22 or newer, Claude Code, and a Kaltura account with a partner id and admin
 |---|---|
 | `PLAN.md` | Full design: architecture, data contracts, pipeline stages, roadmap. |
 | `docs/implementation-appendix.md` | The Kaltura API contract the engine implements. |
+| `docs/transparency-and-consent.md` | What ships by default, what you still decide, where to check the law. |
 | `CLAUDE.md` | Rules for contributing to this repo. |
 | `SECURITY.md` | How to report a vulnerability. |
 

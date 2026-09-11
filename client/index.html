@@ -40,7 +40,15 @@
         <img class="start-logo" src="./assets/logo.svg" alt="" width="48" height="48">
         <h1 id="welcome-title" class="start-title">AI Presenter</h1>
         <p id="welcome-subtitle" class="start-tagline">An AI-narrated presentation with live Q&amp;A</p>
-        <p class="disclosure-line" role="note">This experience is presented by an AI avatar. It is not a human, and it cannot make commitments on anyone's behalf.</p>
+        <p id="disclosure-line" class="disclosure-line" role="note">This experience is presented by an AI avatar. It is not a human, and it cannot make commitments on anyone's behalf.</p>
+        <div id="ai-content-label-welcome" class="ai-content-label ai-content-label-static" hidden>
+          <svg viewBox="0 0 20 20" width="16" height="16" role="img" aria-label="AI-generated content">
+            <rect x="0.5" y="0.5" width="19" height="19" rx="5" fill="#111827" stroke="#9ca3af" stroke-width="1"></rect>
+            <text x="10" y="13.5" font-family="system-ui, sans-serif" font-size="8" font-weight="700" fill="#f3f4f6" text-anchor="middle">AI</text>
+            <path d="M15.2 3.6l0.5 1.3 1.3 0.5-1.3 0.5-0.5 1.3-0.5-1.3-1.3-0.5 1.3-0.5z" fill="#9ca3af"></path>
+          </svg>
+          <span>Voice and appearance are a synthetic recreation</span>
+        </div>
 
         <ul class="start-steps-list">
           <li class="start-step"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>Watch and listen &mdash; the avatar presents the deck for you automatically.</li>
@@ -84,12 +92,9 @@
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
         <h3 id="privacy-panel-title">Privacy details</h3>
-        <!-- privacy.controllerName / privacy.controllerContact are not wired through
-             engine/bundle.mjs yet. Until a project.json field exists for them, this
-             stays a bracketed placeholder rather than a guess at real contact details. -->
         <dl class="privacy-list">
           <dt>Who is responsible for this data</dt>
-          <dd>[controller name] &mdash; [controller contact]</dd>
+          <dd id="privacy-controller">[controller name] &mdash; [controller contact]</dd>
           <dt>What is collected</dt>
           <dd>By default, no audio or video of you is recorded or stored. Typed and spoken questions are kept only as a session transcript, for this session only.</dd>
           <dt>Why</dt>

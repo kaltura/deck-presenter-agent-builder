@@ -24,6 +24,11 @@ async function main() {
   if (!existsSync(projectJsonPath)) fail(flags, EXIT.USAGE, `No project.json at ${projectJsonPath}`);
   const project = JSON.parse(readFileSync(projectJsonPath, 'utf8'));
 
+  const desiredSpeed = project.avatar?.voiceSpeed;
+  if (desiredSpeed != null && (desiredSpeed < 0.7 || desiredSpeed > 1.2)) {
+    fail(flags, EXIT.USAGE, `avatar.voiceSpeed must be between 0.7 and 1.2, got ${desiredSpeed}`);
+  }
+
   const { mgmt, partnerId } = connect(projectRoot, flags);
   const content = await loadContent(projectRoot);
   const state = loadState(projectRoot);
@@ -47,11 +52,6 @@ async function main() {
     if (!template) throw new Error(`avatar.templateName is "${templateName}" but no such avatar template exists.`);
     desiredVoiceId = template.voice.id;
     desiredVisualId = template.face.id;
-  }
-
-  const desiredSpeed = project.avatar?.voiceSpeed;
-  if (desiredSpeed != null && (desiredSpeed < 0.7 || desiredSpeed > 1.2)) {
-    fail(flags, EXIT.USAGE, `avatar.voiceSpeed must be between 0.7 and 1.2, got ${desiredSpeed}`);
   }
 
   const openingUpToDate = before.openingPhrase === desiredOpening;
