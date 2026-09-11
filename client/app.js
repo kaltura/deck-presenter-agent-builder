@@ -5,6 +5,7 @@ import { createNoiseSuppressor } from '@kaltura/intelligent-agents/experience/no
 import { parseSections } from './prompt-format.js';
 import { normalizeTyped, typedTextsMatch } from './echo-match.js';
 import { isWithinCooldown } from './nav-cooldown.js';
+import { levelAt, statsSummary } from './mic-stats.js';
 
 // ── Config (bundle.mjs rewrites these four before esbuild runs) ──
 const PARTNER_ID = 0;
@@ -195,7 +196,10 @@ const el = {
   iconMicOff: document.getElementById('icon-mic-off'),
 
   transcriptPanel: document.getElementById('transcript-panel'),
-  transcriptContent: document.getElementById('transcript-content'),
+  transcriptBody: document.getElementById('transcript-body'),
+  btnDownloadTranscript: document.getElementById('btn-download-transcript'),
+  btnCloseTranscript: document.getElementById('btn-close-transcript'),
+  micStats: document.getElementById('mic-stats'),
 
   statusToast: document.getElementById('status-toast'),
 
@@ -224,6 +228,12 @@ let micMuted = false;
 let viewerMicMuted = false;
 let micPausedForForm = false;
 let contactClosedAt = 0;
+
+// ── Mic input statistics: numbers only, no audio, no text. Kept in memory, shown as one
+// in-place line in the debug panel and as a short block at the end of the downloaded log. ──
+const MIC_GATE_DB = -50;
+const MIC_STATS_TICK_MS = 100;
+const micStats = { ctx: null, raw: null, gated: null, buf: null, timer: null, ticks: 0, hist: new Uint32Array(101), openTicks: 0, openings: 0, gateOpen: false, turns: 0, shortTurns: 0, bargeIns: 0 };
 let autoPlayEnabled = true;
 let autoPlayTimer = null;
 let countdownTicker = null;
@@ -481,11 +491,71 @@ function appendChatMessage(text, role) {
   return bubble;
 }
 
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function micAudioContext() {
+  if (!micStats.ctx) micStats.ctx = new AudioContext();
+  return micStats.ctx;
+}
+function tapMicStream(stream) {
+  const ctx = micAudioContext();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  return analyser;
+}
+function analyserDb(analyser, buf) {
+  analyser.getFloatTimeDomainData(buf);
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+  const rms = Math.sqrt(sum / buf.length);
+  return rms > 0 ? Math.max(-100, Math.min(0, 20 * Math.log10(rms))) : -100;
+}
+// cfg.noiseProcessor: the SDK noise gate, with level taps before and after it for the stats.
+async function gatedMicProcessor(raw) {
+  const ctx = micAudioContext();
+  ctx.resume?.().catch(() => {});
+  const gate = await createNoiseSuppressor({ audioContext: ctx, thresholdDb: MIC_GATE_DB })(raw);
+  micStats.raw = tapMicStream(raw);
+  micStats.gated = tapMicStream(gate.stream);
+  micStats.buf = new Float32Array(2048);
+  clearInterval(micStats.timer);
+  micStats.timer = setInterval(micStatsTick, MIC_STATS_TICK_MS);
+  return { stream: gate.stream, stop() { clearInterval(micStats.timer); micStats.timer = null; gate.stop(); } };
+}
+function micStatsTick() {
+  if (viewerMicMuted || micPausedForForm || !micStats.raw) return;
+  const rawDb = analyserDb(micStats.raw, micStats.buf);
+  const open = analyserDb(micStats.gated, micStats.buf) > -75;
+  micStats.ticks++;
+  micStats.hist[Math.round(-rawDb)]++; // bin i = -i dBFS
+  if (open) micStats.openTicks++;
+  if (open && !micStats.gateOpen) micStats.openings++;
+  micStats.gateOpen = open;
+  if (micStats.ticks % 50 === 0) renderMicStats();
+}
+function micStatsSummary() {
+  return statsSummary(micStats, MIC_STATS_TICK_MS, MIC_GATE_DB);
+}
+function renderMicStats() {
+  const m = micStatsSummary();
+  if (!m || !el.micStats) return;
+  el.micStats.textContent = `mic · floor ${levelAt(micStats.hist, micStats.ticks, 0.9)} · speech ${levelAt(micStats.hist, micStats.ticks, 0.1)} dBFS · gate open ${Math.round(100 * micStats.openTicks / micStats.ticks)}% (${micStats.openings}) · voice turns ${micStats.turns} (${micStats.shortTurns} short, ${micStats.bargeIns} barge-in) · ${m.sampled.split(' ')[0]}`;
+  el.micStats.classList.remove('hidden');
+}
+
 function addDebugEntry(text) {
-  if (!el.transcriptContent) return;
-  const line = document.createElement('p');
-  line.textContent = `${new Date().toLocaleTimeString()} — ${text}`;
-  el.transcriptContent.appendChild(line);
+  if (!el.transcriptBody) return;
+  const empty = el.transcriptBody.querySelector('.transcript-empty');
+  if (empty) empty.remove();
+  const line = document.createElement('div');
+  line.className = 'transcript-entry';
+  const ts = new Date().toLocaleTimeString();
+  line.innerHTML = `<span class="transcript-ts">${ts}</span> ${escapeHtml(text)}`;
+  el.transcriptBody.appendChild(line);
+  el.transcriptBody.scrollTop = el.transcriptBody.scrollHeight;
 }
 
 function showToast(message, kind = 'info') {
@@ -867,8 +937,6 @@ async function initAvatar() {
     }
   }
 
-  const gatedMicProcessor = createNoiseSuppressor();
-
   session = new KalturaAvatarSession({
     token: init.ks,
     conversationManagerUrl: init.conversationManagerUrl,
@@ -990,6 +1058,7 @@ function registerSessionEvents(sess) {
   sess.on('transcript', ({ type, text }) => {
     if (type === 'partial' || !text) return;
     if (type === 'user') {
+      addDebugEntry(`user: ${text}`);
       // The SDK can batch a typed question together with a subsequent
       // app-injected speak() (a nav nudge, resume cue, etc.) into one
       // combined "user" turn, so strip our own instruction text first: an
@@ -1001,11 +1070,16 @@ function registerSessionEvents(sess) {
         if (awaitingTyped && typedTextsMatch(normalizeTyped(viewerText), awaitingTyped.norm)) awaitingTyped = null;
         return;
       }
+      const words = viewerText.trim().split(/\s+/).length;
+      micStats.turns++;
+      if (words < 3) micStats.shortTurns++;
+      if (avatarSpeaking) micStats.bargeIns++;
       appendChatMessage(viewerText, 'user');
       markUserInteraction();
       if (TOOL_NAMES.endSession && GOODBYE_PHRASE_RE.test(viewerText)) handleGoodbye();
       else cancelGoodbyeGrace();
     } else {
+      addDebugEntry(`avatar: ${text}`);
       lastAvatarTextEndedWithQuestion = /\?\s*$/.test(text.trim());
       const now = Date.now();
       if (avatarBubble && now - avatarBubbleAt < 4000) {
@@ -1115,6 +1189,18 @@ function bindEvents() {
   el.btnRestartSession.addEventListener('click', () => window.location.reload());
 
   el.btnTranscript.addEventListener('click', () => el.transcriptPanel.classList.toggle('hidden'));
+  el.btnCloseTranscript.addEventListener('click', () => el.transcriptPanel.classList.add('hidden'));
+  el.btnDownloadTranscript.addEventListener('click', () => {
+    const lines = [...el.transcriptBody.querySelectorAll('.transcript-entry')].map((n) => n.textContent);
+    const mic = micStatsSummary();
+    if (mic) lines.push('', '=== mic stats (levels and counts only) ===', ...Object.entries(mic).map(([k, v]) => `${k}: ${v}`));
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'debug-log.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
   el.btnClearMemory.addEventListener('click', () => { presenter?.clearMemory?.(); showToast('Memory cleared.', 'info'); });
 
   document.addEventListener('keydown', (ev) => {

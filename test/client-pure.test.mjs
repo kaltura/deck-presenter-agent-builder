@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeTyped, typedTextsMatch } from '../client/echo-match.js';
 import { isWithinCooldown } from '../client/nav-cooldown.js';
+import { levelAt, statsSummary } from '../client/mic-stats.js';
 
 test('normalizeTyped trims, lowercases, and drops punctuation', () => {
   assert.equal(normalizeTyped('  What Does   this   COST?  '), 'what does this cost');
@@ -45,4 +46,36 @@ test('isWithinCooldown is false once the window has fully elapsed', () => {
 
 test('isWithinCooldown is false when the window never started', () => {
   assert.equal(isWithinCooldown(0, 1500, 2500), false);
+});
+
+test('levelAt returns the dBFS bucket holding a single concentrated spike', () => {
+  const hist = new Uint32Array(101);
+  hist[20] = 100;
+  assert.equal(levelAt(hist, 100, 0.5), -20);
+});
+
+test('levelAt walks from loudest to quietest as q rises', () => {
+  const hist = new Uint32Array(101);
+  hist[10] = 50;
+  hist[30] = 50;
+  assert.equal(levelAt(hist, 100, 0.1), -10);
+  assert.equal(levelAt(hist, 100, 0.9), -30);
+});
+
+test('statsSummary is null before any tick has been recorded', () => {
+  assert.equal(statsSummary({ ticks: 0, hist: new Uint32Array(101) }, 100, -50), null);
+});
+
+test('statsSummary formats levels, gate-open share, and voice-turn counts', () => {
+  const hist = new Uint32Array(101);
+  hist[10] = 60;
+  hist[50] = 540;
+  const stats = { ticks: 600, hist, openTicks: 300, openings: 4, turns: 5, shortTurns: 2, bargeIns: 1 };
+  assert.deepEqual(statsSummary(stats, 100, -50), {
+    'gate threshold': '-50 dBFS',
+    sampled: '1m00s (mic on, not muted)',
+    'raw level: floor / median / speech': '-50 / -50 / -10 dBFS',
+    'gate open': '50% of the time, 4 openings',
+    'voice turns': '5 (2 under 3 words, 1 while the avatar spoke)',
+  });
 });
