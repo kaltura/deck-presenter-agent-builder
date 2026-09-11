@@ -125,13 +125,20 @@
           <canvas id="pdf-canvas"></canvas>
           <div id="annotation-layer" class="annotation-layer"></div>
 
-          <div id="avatar-pip" class="avatar-pip" role="button" tabindex="0" aria-label="Pause or resume the avatar">
+          <div id="avatar-pip" class="avatar-pip" role="button" tabindex="0"
+            aria-label="Avatar video. Click to pause or resume the avatar. Drag to reposition on screen."
+            title="Click to pause/resume the avatar | Drag to reposition">
             <div id="avatar-loading" class="avatar-loading">
               <span class="avatar-loading-spinner" aria-hidden="true"></span>
               <span class="sr-only">Connecting to the avatar&hellip;</span>
             </div>
             <div id="avatar-pause-overlay" class="avatar-pause-overlay hidden">
               <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+            </div>
+            <span class="avatar-pip-tooltip">Click to pause/resume &bull; Drag to reposition</span>
+            <div class="avatar-pip-grab-dots" aria-hidden="true">
+              <span></span><span></span><span></span>
+              <span></span><span></span><span></span>
             </div>
             <div id="ai-content-label" class="ai-content-label" hidden>
               <svg viewBox="0 0 20 20" width="16" height="16" role="img" aria-label="AI-generated content">
