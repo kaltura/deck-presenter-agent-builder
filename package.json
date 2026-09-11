@@ -31,12 +31,14 @@
     "lint-prompts": "node bin/lint-prompts.mjs --project demo && node bin/lint-prompts.mjs --project fixtures/smoke-project",
     "eval-retrieval": "node bin/eval-retrieval.mjs --project demo",
     "eval": "node engine/eval.mjs",
-    "test": "node --test \"test/**/*.test.mjs\""
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@kaltura/intelligent-agents": "github:kaltura/intelligent-agents-sdk#v1.19.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "esbuild": "^0.28.2"
   }
 }

@@ -44,6 +44,12 @@ dist.html
 *.tmp-*
 .bundle-entry.tmp.js
 
+# Playwright E2E run artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # Node
 node_modules/
 npm-debug.log*

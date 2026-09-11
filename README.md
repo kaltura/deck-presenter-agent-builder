@@ -42,6 +42,7 @@ Node 22 or newer, Claude Code, and a Kaltura account with a partner id and admin
 | `PLAN.md` | Full design: architecture, data contracts, pipeline stages, roadmap. |
 | `docs/implementation-appendix.md` | The Kaltura API contract the engine implements. |
 | `docs/transparency-and-consent.md` | What ships by default, what you still decide, where to check the law. |
+| `client/README.md` | The presenter web app: architecture, theming, extension points, running the E2E suite. |
 | `CLAUDE.md` | Rules for contributing to this repo. |
 | `SECURITY.md` | How to report a vulnerability. |
 

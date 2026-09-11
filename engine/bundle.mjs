@@ -273,6 +273,13 @@ export async function bundle(projectRoot, { pdfUrl, widgetId, partnerId } = {}) 
       target: 'es2020',
       write: false,
       absWorkingDir: clientDir,
+      // Not minifyIdentifiers: SLIDE_DATA and friends are plain top-level
+      // `let` bindings inside this IIFE, and test/bundle.test.mjs (plus this
+      // bundle's own validation just below) checks for their literal names
+      // in the output. Whitespace/syntax minification still cuts real bytes
+      // with no such risk.
+      minifyWhitespace: true,
+      minifySyntax: true,
     });
     bundledJs = built.outputFiles[0].text;
   } finally {
