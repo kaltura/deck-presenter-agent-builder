@@ -190,6 +190,9 @@ const el = {
   btnMute: document.getElementById('btn-mute'),
   iconUnmuted: document.getElementById('icon-unmuted'),
   iconMuted: document.getElementById('icon-muted'),
+  btnMicMute: document.getElementById('btn-mic-mute'),
+  iconMicOn: document.getElementById('icon-mic-on'),
+  iconMicOff: document.getElementById('icon-mic-off'),
 
   transcriptPanel: document.getElementById('transcript-panel'),
   transcriptContent: document.getElementById('transcript-content'),
@@ -218,6 +221,7 @@ let avatarSpeaking = false;
 let isPaused = false;
 let ccEnabled = false;
 let micMuted = false;
+let viewerMicMuted = false;
 let micPausedForForm = false;
 let contactClosedAt = 0;
 let autoPlayEnabled = true;
@@ -580,7 +584,10 @@ function openContactModal(reason) {
 }
 function pauseAvatarForForm() {
   micPausedForForm = true;
-  session?.pauseMic?.();
+  // Stray speech while typing ("um...") was taken as "continue" and moved
+  // the deck. Only pause the mic if the viewer hadn't already muted it
+  // themselves, so closing the form doesn't unmute a mic they wanted off.
+  if (session && !viewerMicMuted) { try { session.mute(); } catch { /* mic not started */ } }
   try { session?.interrupt?.(); } catch { /* not connected: nothing to interrupt */ }
 }
 function closeContactModal() {
@@ -589,7 +596,7 @@ function closeContactModal() {
   el.contactModal.classList.add('hidden');
   el.contactForm.reset();
   micPausedForForm = false;
-  session?.resumeMic?.();
+  if (session && !viewerMicMuted && !sessionEnded) { try { session.unmute(); } catch { /* mic not started */ } }
 }
 function submitContact(ev) {
   ev.preventDefault();
@@ -1082,6 +1089,15 @@ function bindEvents() {
     el.iconMuted.classList.toggle('hidden', !micMuted);
     const audioEl = document.querySelector('audio');
     if (audioEl) audioEl.muted = micMuted;
+  });
+  el.btnMicMute.addEventListener('click', () => {
+    if (micPausedForForm || !session) return;
+    viewerMicMuted = !viewerMicMuted;
+    if (viewerMicMuted) session.mute(); else session.unmute();
+    el.btnMicMute.setAttribute('aria-pressed', String(viewerMicMuted));
+    el.btnMicMute.setAttribute('aria-label', viewerMicMuted ? 'Unmute your microphone' : 'Mute your microphone');
+    el.iconMicOn.classList.toggle('hidden', viewerMicMuted);
+    el.iconMicOff.classList.toggle('hidden', !viewerMicMuted);
   });
 
   el.chatForm.addEventListener('submit', (ev) => {
