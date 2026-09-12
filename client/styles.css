@@ -129,6 +129,11 @@ button, input, textarea { font-family: inherit; }
   color: var(--color-text);
   text-decoration: none;
   font-size: 13px;
+  animation: pdfGlow 2s ease-in-out 1s 3;
+}
+@keyframes pdfGlow {
+  0%, 100% { filter: none; }
+  50% { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-primary) 60%, transparent)); color: #fff; }
 }
 .badge-pdf {
   font-size: 10px;
@@ -789,4 +794,9 @@ button, input, textarea { font-family: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+
+@media print {
+  .app-header, .controls-bar, .avatar-pip, .transcript-panel, .status-toast { display: none !important; }
+  .presentation-container { box-shadow: none; border-radius: 0; }
 }
