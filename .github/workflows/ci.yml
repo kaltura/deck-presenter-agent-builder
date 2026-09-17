@@ -28,11 +28,13 @@ jobs:
 
       - name: Block committed content, credentials, and porting source
         run: |
-          # Real deck content is allowed only under fixtures/ and demo/, which
-          # are fictional by rule. data/slides anywhere else is a leak.
+          # Real deck content is allowed only under fixtures/, demo/, and
+          # test/fixtures/ (synthetic test data), which are fictional by
+          # rule. data/slides anywhere else is a leak.
           bad=$(git ls-files \
-            | grep -vE '^(fixtures|demo)/' \
+            | grep -vE '^(fixtures|demo|test/fixtures)/' \
             | grep -vE '^\.env\.example$' \
+            | grep -vE '(^|/)\.gitkeep$' \
             | grep -E \
               -e '^port/' \
               -e '^\.env($|\.)' \
