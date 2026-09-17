@@ -20,6 +20,7 @@
     "skills/",
     ".claude-plugin/",
     "docs/",
+    ".env.example",
     "README.md",
     "LICENSE",
     "SECURITY.md"
