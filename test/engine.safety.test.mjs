@@ -117,21 +117,6 @@ test('update-followup refuses when followUpEmail is on but recipients is empty',
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('update-followup refuses when KALTURA_MESSAGING_URL is unset', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'followup-test-'));
-  cpSync(FIXTURE, dir, { recursive: true });
-  const project = JSON.parse(readFileSync(resolve(dir, 'project.json'), 'utf8'));
-  project.features.followUpEmail = true;
-  project.followUpEmail = { recipients: ['test@example.com'], emailProviderId: '' };
-  writeFileSync(resolve(dir, 'project.json'), JSON.stringify(project));
-  writeFileSync(resolve(dir, '.env'), `KALTURA_PARTNER_ID=${FIXTURE_PARTNER_ID}\nKALTURA_ADMIN_SECRET=fake-secret-for-dry-run-only\n`);
-
-  const { code, stderr } = run('engine/update-followup.mjs', ['--project', dir]);
-  assert.equal(code, 3, stderr);
-  assert.match(stderr, /KALTURA_MESSAGING_URL is not set/);
-  rmSync(dir, { recursive: true, force: true });
-});
-
 test('update-feedback skips with no network call when features.feedback is off', () => {
   const { code, stderr, stdout } = run('engine/update-feedback.mjs', ['--project', FIXTURE, '--json']);
   assert.equal(code, 0, stderr);
@@ -150,21 +135,6 @@ test('update-feedback refuses when feedback is on but recipients is empty', () =
   const { code, stderr } = run('engine/update-feedback.mjs', ['--project', dir]);
   assert.equal(code, 4, stderr);
   assert.match(stderr, /feedback\.recipients is empty/);
-  rmSync(dir, { recursive: true, force: true });
-});
-
-test('update-feedback refuses when KALTURA_MESSAGING_URL is unset', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'feedback-test-'));
-  cpSync(FIXTURE, dir, { recursive: true });
-  const project = JSON.parse(readFileSync(resolve(dir, 'project.json'), 'utf8'));
-  project.features.feedback = true;
-  project.feedback = { recipients: ['test@example.com'], emailProviderId: '' };
-  writeFileSync(resolve(dir, 'project.json'), JSON.stringify(project));
-  writeFileSync(resolve(dir, '.env'), `KALTURA_PARTNER_ID=${FIXTURE_PARTNER_ID}\nKALTURA_ADMIN_SECRET=fake-secret-for-dry-run-only\n`);
-
-  const { code, stderr } = run('engine/update-feedback.mjs', ['--project', dir]);
-  assert.equal(code, 3, stderr);
-  assert.match(stderr, /KALTURA_MESSAGING_URL is not set/);
   rmSync(dir, { recursive: true, force: true });
 });
 

@@ -21,7 +21,7 @@ export function connect(projectRoot, flags) {
     ovpUrl: creds.serviceUrl,
     ...(creds.messagingUrl ? { messagingUrl: creds.messagingUrl } : {}),
   });
-  return { mgmt, partnerId: creds.partnerId, widgetId: creds.widgetId, serviceUrl: creds.serviceUrl };
+  return { mgmt, partnerId: creds.partnerId, serviceUrl: creds.serviceUrl };
 }
 
 export async function adminKs(mgmt) {

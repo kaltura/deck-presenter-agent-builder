@@ -28,7 +28,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT, runMain } from './lib/cli.mjs';
 import { connect, adminKs } from './lib/kaltura.mjs';
-import { loadCredentials } from './lib/env.mjs';
 import { loadState, recordStep, assertPartnerMatch } from './lib/state.mjs';
 import { loadContent } from './lib/load-content.mjs';
 
@@ -99,10 +98,6 @@ async function main() {
     fail(flags, EXIT.VALIDATION, 'features.feedback is on but project.json.feedback.recipients is empty. Set at least one Kaltura user id (often the account login email).');
   }
   const { mgmt, partnerId } = connect(projectRoot, flags);
-  const creds = loadCredentials(projectRoot);
-  if (!creds.messagingUrl) {
-    fail(flags, EXIT.CREDENTIAL, 'features.feedback is on but KALTURA_MESSAGING_URL is not set in .env. Ask your Kaltura account contact for this account\'s Messaging API base URL.');
-  }
   const content = await loadContent(projectRoot);
   const state = loadState(projectRoot);
   if (!state) fail(flags, EXIT.UNEXPECTED, 'No .provisioning-state.json. Run engine/provision.mjs first.');

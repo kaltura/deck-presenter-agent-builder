@@ -35,7 +35,6 @@ export function loadCredentials(projectRoot) {
   const partnerId = get('KALTURA_PARTNER_ID');
   const adminSecret = get('KALTURA_ADMIN_SECRET');
   const serviceUrl = get('KALTURA_SERVICE_URL') || 'https://cdnapisec.kaltura.com/api_v3';
-  const widgetId = get('KALTURA_WIDGET_ID') || '';
   const messagingUrl = get('KALTURA_MESSAGING_URL') || '';
 
   const missing = [];
@@ -43,5 +42,5 @@ export function loadCredentials(projectRoot) {
   if (!adminSecret) missing.push('KALTURA_ADMIN_SECRET');
   if (missing.length) return { ok: false, missing, envPath };
 
-  return { ok: true, partnerId: String(partnerId), adminSecret, serviceUrl, widgetId, messagingUrl, envPath };
+  return { ok: true, partnerId: String(partnerId), adminSecret, serviceUrl, messagingUrl, envPath };
 }
