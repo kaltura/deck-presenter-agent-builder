@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * PLAN.md 13, Phase 1: "a chunk-level retrieval eval over demo/'s KB files
- * (synthetic Q&A, recall and precision) so a retrieval miss is
- * distinguishable from a generation miss."
+ * A chunk-level retrieval eval over a project's KB files (synthetic Q&A,
+ * recall and precision) so a retrieval miss is distinguishable from a
+ * generation miss.
  *
  * The live agent's actual retrieval runs server-side inside Kaltura's own
  * use_knowledge_base capability, which this repo never re-implements and

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The semantic lint from PLAN.md 6.4 / skills/build-deck-agent/reference-prompts.md,
+ * The semantic lint from ARCHITECTURE.md 6.4 / skills/build-deck-agent/reference-prompts.md,
  * as a mechanical check a CI job can run without a live account. Shape validity is
  * already guaranteed by schema-enforced generation, so this checks meaning:
  *

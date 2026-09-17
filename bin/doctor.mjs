@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Re-runnable environment + credential preflight (PLAN.md 12, 13 Phase 1).
+ * Re-runnable environment + credential preflight.
  * Checks Node version always. With --project, also loads that project's
  * .env and makes one cheap authenticated Kaltura call (mint an admin
  * session token) to confirm the account is reachable before anything else

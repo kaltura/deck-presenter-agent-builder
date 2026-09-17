@@ -12,7 +12,7 @@ node engine/verify.mjs    --project fixtures/smoke-project --dry-run
 
 Three slides, numbered 1 to 3 with no gaps, so the bundler's contiguity check has something valid to pass and something easy to break on purpose.
 
-It is not the demo. `demo/` is a fuller fictional deck for people evaluating the tool, and is Phase 1 work. This is a test fixture: minimal on purpose, and it stays that way.
+It is not the demo. `demo/` is a fuller fictional deck for people evaluating the tool. This is a test fixture: minimal on purpose, and it stays that way.
 
 ## What each part is for
 

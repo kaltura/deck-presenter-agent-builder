@@ -2,7 +2,7 @@
  * Refuses to create a Tool entity whose name already exists on this account
  * unless this project's own state already claims that exact id. Tools are
  * partner-level and shared by name, so this is the same collision guard as
- * every other named resource this engine creates (PLAN.md 8).
+ * every other named resource this engine creates (ARCHITECTURE.md 8).
  */
 export async function assertNamedResourceFree(list, name, ourExistingId) {
   for await (const item of list) {

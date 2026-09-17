@@ -1,5 +1,5 @@
 {
-  "_comment": "Human-written eval questions, 2-3 per chapter, phrased the way a real audience would ask. See PLAN.md 6.5 and 6.8.",
+  "_comment": "Human-written eval questions, 2-3 per chapter, phrased the way a real audience would ask. See ARCHITECTURE.md 6.5 and 6.8.",
   "questions": [
     {
       "chapter": "Introduction",

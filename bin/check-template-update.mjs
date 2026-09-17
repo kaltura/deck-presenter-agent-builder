@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Read-only staleness check (PLAN.md 12): does this project's engine/ (as
+ * Read-only staleness check (ARCHITECTURE.md 12): does this project's engine/ (as
  * scripts/) and client/ still match the toolkit commit it was scaffolded
  * from? Lists what changed upstream since; never writes to the project.
  *

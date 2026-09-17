@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Native PPTX speaker-notes extraction (PLAN.md 13, Phase 3). Reads a
+ * Native PPTX speaker-notes extraction. Reads a
  * .pptx directly (it's a zip of OOXML) and writes the same "## Slide N"
  * markdown shape reference-ingestion.md already expects from a
  * hand-prepared notes.md, so a PPTX deck feeds the same ingest stage a

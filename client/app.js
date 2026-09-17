@@ -85,7 +85,7 @@ let PRESENTER_CONTEXT = {};
 // Whether the avatar's voice/likeness is a fresh synthetic build ('fresh') or
 // cloned from a real person's recorded voice/likeness ('cloned'), rewritten by
 // bundle.mjs from project.json avatar.source. Drives the synthetic-content
-// label (PLAN.md 10).
+// label (ARCHITECTURE.md 10).
 let AVATAR_SOURCE = 'fresh';
 
 // The AI-disclosure line's text, rewritten by bundle.mjs from project.json

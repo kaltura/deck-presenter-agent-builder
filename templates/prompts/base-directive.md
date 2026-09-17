@@ -99,6 +99,6 @@ not a goodbye; keep presenting.
 
 <!--
   Rendered deterministically from data/nav-rules.json during prompt drafting
-  (PLAN.md 6.4), not hand-written. Cites real slide numbers and chapter
+  (ARCHITECTURE.md 6.4), not hand-written. Cites real slide numbers and chapter
   boundaries so this section and data/routes.json never disagree.
 -->

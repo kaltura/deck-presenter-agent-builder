@@ -125,7 +125,7 @@ async function main() {
   };
   writeFileSync(resolve(targetDir, 'package.json'), JSON.stringify(projectPkg, null, 2) + '\n');
 
-  // ── What this project was scaffolded from, for check-template-update.mjs (PLAN.md 12) ──
+  // ── What this project was scaffolded from, for check-template-update.mjs (ARCHITECTURE.md 12) ──
   writeFileSync(resolve(targetDir, '.template-version'), templateVersion() + '\n');
 
   // ── This project is its own repo from the start ──

@@ -76,7 +76,7 @@ jobs:
 
       # Needs no live account: checks demo/'s and fixtures/smoke-project's
       # already-generated ingestion and prompt-drafting output against
-      # PLAN.md 6.4's semantic lint (slide references, chapter ranges, KB
+      # ARCHITECTURE.md 6.4's semantic lint (slide references, chapter ranges, KB
       # frontmatter, the fixed identity-and-disclosure skeleton).
       - run: npm run lint-prompts
 

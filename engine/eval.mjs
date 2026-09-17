@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The full eval pass, PLAN.md 6.8 / skills/build-deck-agent/reference-eval.md.
+ * The full eval pass, ARCHITECTURE.md 6.8 / skills/build-deck-agent/reference-eval.md.
  *
  * Runs against the live, already-deployed agent for one project. Read-only
  * against the project's own resources except for one ephemeral, unnamed

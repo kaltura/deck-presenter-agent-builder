@@ -1,4 +1,4 @@
-# Reference: ingestion, terminology, and knowledge base (PLAN.md 6.1-6.3)
+# Reference: ingestion, terminology, and knowledge base (ARCHITECTURE.md 6.1-6.3)
 
 Loaded by the `ingest`, `terms`, and `kb` stages of `SKILL.md`.
 
@@ -6,7 +6,7 @@ Loaded by the `ingest`, `terms`, and `kb` stages of `SKILL.md`.
 
 Before reading a single slide, confirm:
 
-- The file type is supported (PDF for v1; PPTX lands in Phase 3, see `docs/build-log.md` for whether it has landed in this checkout).
+- The file type is supported: PDF, or native PPTX (`bin/extract-pptx-notes.mjs` pulls speaker notes directly from the `.pptx`; the deck itself still needs a PDF export for the vision pass).
 - Page count is sane (matches what the human said, or is at least non-zero and finite).
 - Text is actually extractable: not a scanned image with no text layer, not corrupted, not password-protected.
 

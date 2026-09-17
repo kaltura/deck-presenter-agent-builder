@@ -1,7 +1,7 @@
 /**
  * Derives the live-caption replacement map from prompts/pronunciation-guide.md,
  * so the caption track can show normal spelling for a term the TTS is told to
- * speak in some other written form. One generic transform, per PLAN.md 5 —
+ * speak in some other written form. One generic transform, per ARCHITECTURE.md 5 —
  * never a per-project hand-maintained map.
  *
  * Each guide line has the shape `TERM -> "spoken form"`. The map inverts it:

@@ -1,4 +1,4 @@
-# Reference: nav-rules and prompt drafting (PLAN.md 6.4)
+# Reference: nav-rules and prompt drafting (ARCHITECTURE.md 6.4)
 
 Loaded by the `prompts` stage of `SKILL.md`.
 

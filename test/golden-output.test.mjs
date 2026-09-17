@@ -4,8 +4,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadContent } from '../engine/lib/load-content.mjs';
 
-// PLAN.md 13, Phase 1: "a golden-output check on demo/'s ingestion and
-// prompt-drafting output". content.mjs (section 5) is a pure function of
+// A golden-output check on demo/'s ingestion and prompt-drafting output.
+// content.mjs (ARCHITECTURE.md 5) is a pure function of
 // project.json + prompts/*.md + data/slides/*.json, so its exports are the
 // right golden surface: any unintended drift in derivation logic, or in the
 // demo/fixture source data, shows up as a diff here instead of only at

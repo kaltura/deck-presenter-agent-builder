@@ -134,7 +134,7 @@ export const END_SESSION_TOOL = project.features?.endSessionTool
     }
   : null;
 
-// ── Follow-up email (PLAN.md 10, docs/implementation-appendix.md "follow-up email").
+// ── Follow-up email (ARCHITECTURE.md 10, docs/implementation-appendix.md "follow-up email").
 // Only consulted by update-followup.mjs, and only when features.followUpEmail is on. ──
 const followUp = project.followUpEmail || {};
 
@@ -252,7 +252,7 @@ export const followupLifecycleRuleB = (templateId) => ({
   action: { actionType: 'sendInsightEmail', recipients: followUp.recipients || [], templateId },
 });
 
-// ── Conversational feedback capture (PLAN.md 10, docs/implementation-appendix.md
+// ── Conversational feedback capture (ARCHITECTURE.md 10, docs/implementation-appendix.md
 // "follow-up email" for the underlying mechanism). Only consulted by
 // update-feedback.mjs, and only when features.feedback is on. Independent of
 // followUpEmail: uses its own insight key (SESSIONFEEDBACK, not FEEDBACK) so both

@@ -1,6 +1,6 @@
 # Implementation appendix: the Kaltura calls
 
-Concrete API contract for `PLAN.md` sections 6.6 (provisioning) and 6.7 (bundle and deploy). Written from a working, already-deployed presenter agent, so the sequence, the required fields, and the gotchas are observed behavior, not guesses.
+Concrete API contract for `ARCHITECTURE.md` sections 6.6 (provisioning) and 6.7 (bundle and deploy). Written from a working, already-deployed presenter agent, so the sequence, the required fields, and the gotchas are observed behavior, not guesses.
 
 Everything here is generic. No account ids, no partner ids, no deck content.
 
@@ -43,7 +43,7 @@ Named helpers exported alongside `Management`, all used below: `tools.client`, `
 
 ## One content module, imported everywhere
 
-No command in `engine/` contains prompt text, a tool description, a slide count, or a persona name. One module reads the project's files and exports every payload constant (PLAN.md 5). Shape:
+No command in `engine/` contains prompt text, a tool description, a slide count, or a persona name. One module reads the project's files and exports every payload constant (ARCHITECTURE.md 5). Shape:
 
 ```js
 const readPrompt = (name) => readFileSync(resolve(PROMPTS_DIR, name), 'utf8').trim();
@@ -64,7 +64,7 @@ Derive counts, never hardcode them. `TOTAL_SLIDES` from `readdirSync` cannot dri
 
 ## Provisioning: nine steps in order
 
-Each step's id goes into `.provisioning-state.json` **the moment it returns**, not at stage end (PLAN.md 8).
+Each step's id goes into `.provisioning-state.json` **the moment it returns**, not at stage end (ARCHITECTURE.md 8).
 
 ### 0. Pre-flight, read-only
 
@@ -88,7 +88,7 @@ const source = await mgmt.avatars.get(sourceAvatarId, admin.ks);   // READ only
 if (!source.voice?.id || !source.visual?.id) fail('Source avatar has no voice or visual.');
 ```
 
-The clone path is additionally gated on a consent record existing in the project repo (PLAN.md 6.6, 10). Check the file before this API call, so a missing consent record costs nothing.
+The clone path is additionally gated on a consent record existing in the project repo (ARCHITECTURE.md 6.6, 10). Check the file before this API call, so a missing consent record costs nothing.
 
 ### 1. Navigation tool
 
@@ -98,7 +98,7 @@ const tool = await mgmt.tools.add(cfg, admin.ks);
 // -> tool.id   (UUID)
 ```
 
-`tools.client(...)` is the builder for a client-executed tool (the browser handles the call). `tools.api`, `tools.csv`, and `tools.code` exist for other kinds. `navToolDefinition` is rendered from `data/nav-rules.json`, never hand-written (PLAN.md 5).
+`tools.client(...)` is the builder for a client-executed tool (the browser handles the call). `tools.api`, `tools.csv`, and `tools.code` exist for other kinds. `navToolDefinition` is rendered from `data/nav-rules.json`, never hand-written (ARCHITECTURE.md 5).
 
 ### 2. Knowledge base category
 
@@ -107,7 +107,7 @@ const cat = await k.findOrCreateCategory({ name: kbCategoryName }, admin.ks);
 // -> cat.id   (numeric)
 ```
 
-**Idempotent on name.** This is the one step safe to re-run blind. `kbCategoryName` is namespaced by `project.json.slug` (PLAN.md 8), so two projects on one account do not land in the same category.
+**Idempotent on name.** This is the one step safe to re-run blind. `kbCategoryName` is namespaced by `project.json.slug` (ARCHITECTURE.md 8), so two projects on one account do not land in the same category.
 
 ### 3. Upload each KB file
 
@@ -120,7 +120,7 @@ const up = await k.uploadMarkdown({ markdown, name: fileName, categoryId: cat.id
 
 Not idempotent. A re-run without state creates duplicate entries in the category, which silently degrades retrieval. The state file must list uploaded filenames, not just a count.
 
-**Open question (PLAN.md 6.3, 12):** whether Kaltura re-chunks an uploaded markdown file or indexes it as one unit. Resolve it here by uploading one deliberately long file and inspecting what retrieval returns. The answer decides whether file sizing is the engine's problem.
+**Open question (ARCHITECTURE.md 6.3, 12):** whether Kaltura re-chunks an uploaded markdown file or indexes it as one unit. Resolve it here by uploading one deliberately long file and inspecting what retrieval returns. The answer decides whether file sizing is the engine's problem.
 
 ### 4. Knowledge record
 
@@ -232,7 +232,7 @@ Copy `visual` wholesale. It carries `motionControl` and framing fields beyond `i
 
 **The avatar carries no `tags` field.** Passing one is silently ignored. Tags belong on the agent, step 8.
 
-Write `avatar.source` (`"cloned"` or `"fresh"`) back to `project.json` here, so the client knows whether to render the synthetic-content label (PLAN.md 9).
+Write `avatar.source` (`"cloned"` or `"fresh"`) back to `project.json` here, so the client knows whether to render the synthetic-content label (ARCHITECTURE.md 9).
 
 #### Creating a voice or visual from a sample
 
@@ -257,7 +257,7 @@ await mgmt.avatars.update({
 
 Four things to get right:
 
-- **`consentRef` is a real field, so write the consent record's identifier into it.** That is the platform-side half of the PLAN.md 10 gate: the record lives in the project repo and its reference travels with the catalog item. Include who provided it, when, and what use it covers.
+- **`consentRef` is a real field, so write the consent record's identifier into it.** That is the platform-side half of the ARCHITECTURE.md 10 gate: the record lives in the project repo and its reference travels with the catalog item. Include who provided it, when, and what use it covers.
 - **Neither call is idempotent.** Every run creates a new catalog item and orphans the previous one. Skip the step when state already has an id; on `--force`, print the id being orphaned.
 - **The live avatar stream is square, 512 by 512.** A portrait photo gets letterboxed.
 - **Padding a portrait to square with a flat colour shows as visible bars in the stream.** Extend the backdrop and the subject's shoulders past the original photo edges instead, so the square crop has real image in every corner. This is an image-preparation step before the API call, not an API setting.
@@ -338,7 +338,7 @@ After the write, assert that `base_directive`, `prompts`, `knowledge_ids`, `capa
 
 ## Optional stage: follow-up email after a session
 
-Off by default (PLAN.md 10). One InsightSettings entity per insight, two lifecycle rules, one email template. SDK v1.22.0 folded the email template API into the management SDK, so this whole stage now runs on a single `ks`, with no second Kaltura API and no separate session key.
+Off by default (ARCHITECTURE.md 10). One InsightSettings entity per insight, two lifecycle rules, one email template. SDK v1.22.0 folded the email template API into the management SDK, so this whole stage now runs on a single `ks`, with no second Kaltura API and no separate session key.
 
 **Step 1, create/reuse each insight as a standalone entity:**
 
@@ -399,7 +399,7 @@ The agent's own summary wording is a separate field: `mgmt.agents.update({ agent
 
 ## Failure, resume, and state
 
-On any step throwing, write the partial state and exit non-zero (`5`, per the PLAN.md 4 exit-code contract):
+On any step throwing, write the partial state and exit non-zero (`5`, per the ARCHITECTURE.md 4 exit-code contract):
 
 ```js
 function fail(step, err) {
@@ -421,7 +421,7 @@ A `--resume` run reads `createdSoFar`, skips every step with a recorded id, and 
 
 The reference implementation keeps a module of ids that no mutating call may touch, with `isForbidden(id)` and `assertNotForbidden(id, label)` helpers, and calls the assert before every write and on every id read back from config. It exists because a second agent built on the same account can otherwise overwrite a live one.
 
-Generalize this to: **the deny list is the set of ids in the account that this project's own `.provisioning-state.json` does not claim.** That is exactly the collision check in PLAN.md 8, so the engine gets the guard from state rather than from a hardcoded list. Read-only calls against a resource this project does not own stay allowed; cloning a voice from a live avatar needs that.
+Generalize this to: **the deny list is the set of ids in the account that this project's own `.provisioning-state.json` does not claim.** That is exactly the collision check in ARCHITECTURE.md 8, so the engine gets the guard from state rather than from a hardcoded list. Read-only calls against a resource this project does not own stay allowed; cloning a voice from a live avatar needs that.
 
 ## Configuration updates after provisioning
 
@@ -538,7 +538,7 @@ Look up by `systemName` (namespaced by `project.json.slug`) before creating, so 
 
 The bundler inlines `client/` plus the vendored SDK plus generated data into one self-contained HTML file. What matters for the port:
 
-- **Values baked in by source rewrite, not by env at runtime:** `WIDGET_ID`, `PARTNER_ID`, `PDF_URL`, `SDK_VERSION`. Each rewrite is verified present afterward, and the build fails if a replacement did not take. Only the widget id and partner id go in, never `adminSecret` (PLAN.md 5).
+- **Values baked in by source rewrite, not by env at runtime:** `WIDGET_ID`, `PARTNER_ID`, `PDF_URL`, `SDK_VERSION`. Each rewrite is verified present afterward, and the build fails if a replacement did not take. Only the widget id and partner id go in, never `adminSecret` (ARCHITECTURE.md 5).
 - **The runtime `loadData()` fetch body is replaced with pre-loaded literals** so the deployed page makes no data fetches. Post-bundle validation asserts no `fetch(` for slide or prompt paths survives and that the inlined globals are present.
 - **Use function replacers for the CSS and JS injection**, `html.replace(tag, () => code)`. A string replacer interprets `$&` and friends inside the injected code as replacement patterns, which corrupts any regex-escaping helper in the bundle.
 - **Validate slide data before bundling:** every file parses, every file has a numeric `slide`, and the set is contiguous with no gaps and no duplicates. Report missing and duplicate numbers by name. The reference hardcodes the expected count; the generic engine reads it from `project.json`.
@@ -546,7 +546,7 @@ The bundler inlines `client/` plus the vendored SDK plus generated data into one
 - **Read `SDK_VERSION` from the SDK's own `package.json`** so the version shown in the UI cannot drift from what shipped.
 - The bundle is self-contained except two CDN scripts (PDF rendering, websocket transport), which stay external. Validation asserts both are still referenced.
 
-## Client runtime contract (PLAN.md 9)
+## Client runtime contract (ARCHITECTURE.md 9)
 
 The browser side uses the `experience` entry point. Startup:
 
@@ -555,7 +555,7 @@ const token = await mgmt.sessions.createWidgetToken({ widgetId });   // re-minta
 const sess = new KalturaAvatarSession({ ...token, videoEl, audioEl, toolCallName });
 ```
 
-**Video and audio are separate elements.** A single element does not work for this layout, and `audioEl` is what the mute control in PLAN.md 9 acts on.
+**Video and audio are separate elements.** A single element does not work for this layout, and `audioEl` is what the mute control in ARCHITECTURE.md 9 acts on.
 
 `toolCallName` is the navigation tool's name from the content module, never a literal.
 
@@ -574,8 +574,8 @@ Handling notes that cost real debugging time:
 - **Autoplay blocking is normal.** Keep a one-time click that calls `sess.startPlayback()`.
 - **The navigation tool call can arrive before `avatarStopTalking`.** Drive slide state from the tool call. Waiting for the speech event makes the deck lag the narration.
 - **On `brainStalled`, re-send once with a resume instruction** that names the current slide and says to continue presenting it and not to navigate. Without the no-navigate clause the recovery jumps the deck.
-- **Captions have no separate server channel.** They are rendered from the same text stream, through `CaptionService(session, { replacements })` with `onCaption(({ text, clear }) => ...)`. `replacements` is the caption map from PLAN.md 5, which turns spoken-letter forms back into normal spelling. Default the toggle off and expose it on a button and a key.
-- **`disclosure` carries the platform's own AI-disclosure text.** It does not replace the always-on line in PLAN.md 9.
+- **Captions have no separate server channel.** They are rendered from the same text stream, through `CaptionService(session, { replacements })` with `onCaption(({ text, clear }) => ...)`. `replacements` is the caption map from ARCHITECTURE.md 5, which turns spoken-letter forms back into normal spelling. Default the toggle off and expose it on a button and a key.
+- **`disclosure` carries the platform's own AI-disclosure text.** It does not replace the always-on line in ARCHITECTURE.md 9.
 - `timeWarning` and `timeExpired` fire against the agent's `maxConversationLength`, so the copy shown is derived from `sessionMaxSeconds`.
 
 ## Verify command (6.8)
@@ -617,9 +617,9 @@ The verify command must be read-only, with no mutating call reachable from it. U
 | Intellect update rejects a body you just read | Round-tripped a `get` result. Pass it through `stripServerManaged` first. |
 | Deck lags the narration by one slide | Slide state waited for `avatarStopTalking` instead of the tool call. |
 
-## Verification plan for the port
+## Offline verification checklist
 
-Phase 0 is proven, per PLAN.md 13, by hand-running against a throwaway `project.json`, a sandbox `.env`, and a few stub slide files. Concretely:
+Prove the engine works by hand-running against a throwaway `project.json`, a sandbox `.env`, and a few stub slide files. Concretely:
 
 1. `doctor` passes against the sandbox account.
 2. `provision --dry-run` prints all nine planned operations and makes no network write.
@@ -629,4 +629,4 @@ Phase 0 is proven, per PLAN.md 13, by hand-running against a throwaway `project.
 6. `bundle` then `deploy` produces a reachable share URL with a content hash in it.
 7. Re-run `update-prompts` with no local change: it reports "already up to date" and makes no call. Same for `update-capabilities` and `update-avatar`.
 8. `attach-tool` twice with the same tool: the second run finds the existing tool, does not create a second one, and leaves the prompts and capabilities untouched.
-9. Point a second project with a different slug at the same account: its provision succeeds, and a mutating call against the first project's id is refused (PLAN.md 8).
+9. Point a second project with a different slug at the same account: its provision succeeds, and a mutating call against the first project's id is refused (ARCHITECTURE.md 8).

@@ -6,7 +6,7 @@
  * connect them (mgmt.lifecycle). Only runs when project.json's
  * features.followUpEmail is on — this is the one feature that captures and
  * emails contact data, so it is off by default and never provisioned
- * implicitly by provision.mjs (PLAN.md 10).
+ * implicitly by provision.mjs (ARCHITECTURE.md 10).
  *
  * Idempotent: an email template already tagged for this project is updated
  * in place, unless its appGuid is stale (the agent was re-provisioned since),

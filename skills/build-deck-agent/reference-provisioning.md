@@ -1,4 +1,4 @@
-# Reference: provisioning and updates (PLAN.md 6.6)
+# Reference: provisioning and updates (ARCHITECTURE.md 6.6)
 
 Loaded by the `provision` stage of `SKILL.md`. The concrete Kaltura call contract (method names, required fields, returned ids, gotchas) lives alongside this file, in `reference-implementation-appendix.md`, copied in at scaffold time from the deck-presenter-agent-builder toolkit's `docs/implementation-appendix.md`. Read it before troubleshooting a provisioning failure. Nothing below duplicates that contract; this file is about which command to run when.
 

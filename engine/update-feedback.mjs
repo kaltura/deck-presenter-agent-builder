@@ -5,7 +5,7 @@
  * and the two session-lifecycle rules that connect them (mgmt.lifecycle).
  * Only runs when project.json's features.feedback is on. Independent of
  * features.followUpEmail: a project can capture feedback without also
- * collecting contact details, or the other way around (PLAN.md 10).
+ * collecting contact details, or the other way around (ARCHITECTURE.md 10).
  *
  * Uses its own insight key, SESSIONFEEDBACK, never FEEDBACK: followUpEmail's
  * own rule already requests an insight keyed FEEDBACK, and two lifecycle

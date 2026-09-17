@@ -1,4 +1,4 @@
-# Reference: testing and eval (PLAN.md 6.8)
+# Reference: testing and eval (ARCHITECTURE.md 6.8)
 
 Loaded by the `checkpoint` stage (for held-out questions) and the `test` stage (for the full run) of `SKILL.md`.
 
@@ -27,9 +27,9 @@ Write one JSON artifact per run to `docs/eval-runs/<ISO-timestamp>.json`: per-ch
 
 Report results as **"N passed / N total"**, never as a percentage or a quality score. At roughly one question per chapter, the sample is a smoke test of the build, not a statistically meaningful evaluation, and a percentage invites reading a precision that isn't there.
 
-## Deferred, not built in v1 (PLAN.md 12)
+## Not built yet (ARCHITECTURE.md 12)
 
 - Checking pronunciation against actually rendered audio, rather than just usage in a transcript.
 - Scoring transcripts for tone fidelity against `project.json.tone`.
 
-Don't build ad hoc versions of either while implementing this stage; note the gap in `docs/build-log.md` if a human asks for one and point them at PLAN.md 12 in the toolkit repo.
+Don't build ad hoc versions of either while implementing this stage; note the gap in `docs/build-log.md` if a human asks for one and point them at ARCHITECTURE.md 12 in the toolkit repo.
