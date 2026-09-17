@@ -11,10 +11,11 @@ import { levelAt, statsSummary } from './mic-stats.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.18';
+const VERSION = '0.1.20';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
+const AVATAR_CONNECT_TIMEOUT_MS = 20000;
 const AUTO_PLAY_AFTER_QUESTION_MS = 15000;
 const RECENT_INTERACTION_MS = 5000;
 const NAV_NUDGE_PREFIX = '[SLIDE CHANGE]';
@@ -160,6 +161,7 @@ const el = {
 
   avatarPip: document.getElementById('avatar-pip'),
   avatarLoading: document.getElementById('avatar-loading'),
+  avatarLoadingLabel: document.getElementById('avatar-loading-label'),
   avatarPauseOverlay: document.getElementById('avatar-pause-overlay'),
   aiContentLabel: document.getElementById('ai-content-label'),
 
@@ -261,6 +263,7 @@ let goodbyeGraceTimer = null;
 let deckPausedAfterGoodbye = false;
 let contactModalOpen = false;
 let contactSubmitted = false;
+let contactDeclined = false;
 let chatLogIdleTimer = null;
 let pageUnloading = false;
 
@@ -565,12 +568,12 @@ function addDebugEntry(text) {
   el.transcriptBody.scrollTop = el.transcriptBody.scrollHeight;
 }
 
-function showToast(message, kind = 'info') {
+function showToast(message, kind = 'info', { sticky = false } = {}) {
   el.statusToast.textContent = message;
   el.statusToast.className = `status-toast ${kind}`;
   el.statusToast.classList.remove('hidden');
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => el.statusToast.classList.add('hidden'), 4000);
+  if (!sticky) showToast._t = setTimeout(() => el.statusToast.classList.add('hidden'), 4000);
 }
 
 // ── Slide UI ──
@@ -742,6 +745,7 @@ function submitContact(ev) {
   closeContactModal();
 }
 function skipContact() {
+  contactDeclined = true;
   closeContactModal();
 }
 
@@ -964,6 +968,37 @@ function initChatLogDrag() {
   });
 }
 
+// ── Widget token + appInit prefetch ──
+// Fired at page load (see init()) so the token mint + appInit round-trip
+// overlaps the welcome/disclaimer dwell time instead of blocking after the
+// Start click. initAvatar() just awaits the same promise.
+let appInitPromise = null;
+
+function prefetchAppInit() {
+  if (appInitPromise) return appInitPromise;
+  appInitPromise = (async () => {
+    if (WIDGET_ID === 'WIDGET_ID_UNSET') {
+      throw new Error('WIDGET_ID is not set. Build with node engine/bundle.mjs (it reads the widget id from .provisioning-state.json, or pass --widget-id).');
+    }
+    const mgmt = new Management({ partnerId: PARTNER_ID });
+    let token = await mgmt.sessions.createWidgetToken({ widgetId: WIDGET_ID });
+    let init;
+    try {
+      init = await mgmt.application.appInit(token.ks);
+    } catch (err) {
+      if (err.status === 401 || err.code === 'unauthorized') {
+        token = await mgmt.sessions.createWidgetToken({ widgetId: WIDGET_ID });
+        init = await mgmt.application.appInit(token.ks);
+      } else {
+        throw err;
+      }
+    }
+    return init;
+  })();
+  appInitPromise.catch(() => {}); // swallow here; initAvatar()'s own await surfaces the real error
+  return appInitPromise;
+}
+
 // ── SDK session wiring ──
 async function initAvatar() {
   const video = document.createElement('video');
@@ -976,23 +1011,7 @@ async function initAvatar() {
   audio.style.display = 'none';
   document.body.appendChild(audio);
 
-  if (WIDGET_ID === 'WIDGET_ID_UNSET') {
-    throw new Error('WIDGET_ID is not set. Build with node engine/bundle.mjs (it reads the widget id from .provisioning-state.json, or pass --widget-id).');
-  }
-
-  const mgmt = new Management({ partnerId: PARTNER_ID });
-  let token = await mgmt.sessions.createWidgetToken({ widgetId: WIDGET_ID });
-  let init;
-  try {
-    init = await mgmt.application.appInit(token.ks);
-  } catch (err) {
-    if (err.status === 401 || err.code === 'unauthorized') {
-      token = await mgmt.sessions.createWidgetToken({ widgetId: WIDGET_ID });
-      init = await mgmt.application.appInit(token.ks);
-    } else {
-      throw err;
-    }
-  }
+  const init = await prefetchAppInit();
 
   session = new KalturaAvatarSession({
     token: init.ks,
@@ -1016,8 +1035,19 @@ async function initAvatar() {
     storage: window.localStorage,
     toolCallName: TOOL_NAMES.nav,
     deckOutline: true,
-    extraMemory: (questions) => ({ interests: cleanInterests(questions) }),
-    restoreMemory: (m) => ({ interests: cleanInterests(m.interests) }),
+    extraMemory: (questions) => ({
+      interests: cleanInterests(questions),
+      contactDeclined: contactDeclined && !contactSubmitted,
+    }),
+    restoreMemory: (m) => {
+      let contactProvided = false;
+      try { contactProvided = !!window.localStorage.getItem(CONTACT_STORAGE_KEY); } catch { /* storage unavailable */ }
+      return {
+        interests: cleanInterests(m.interests),
+        ...(contactProvided ? { contact_provided: true } : {}),
+        ...(!contactProvided && m.contactDeclined ? { contact_declined: true } : {}),
+      };
+    },
   });
 
   const last = presenter.memory?.lastSlide;
@@ -1030,11 +1060,15 @@ async function initAvatar() {
     if (contactModalOpen) return;
     if (isWithinCooldown(contactClosedAt, Date.now(), NAV_BLOCK_AFTER_CONTACT_MS)) return;
     if (resumeTarget() && reason !== 'resume') {
-      const target = resumeTarget();
-      pendingResume = 0;
-      pendingNavNudge = 'resume';
-      presenterGoTo(target, 'resume');
-      return;
+      if (n === 1) {
+        pendingResume = 0; // visitor chose to start fresh instead of resuming
+      } else {
+        const target = resumeTarget();
+        pendingResume = 0;
+        pendingNavNudge = 'resume';
+        presenterGoTo(target, 'resume');
+        return;
+      }
     }
     pendingNavNudge = reason;
     presenterGoTo(n, reason);
@@ -1096,10 +1130,33 @@ function registerSessionEvents(sess) {
     if (state === 'connecting') showToast('Connecting to the avatar…', 'info');
   });
   sess.on('streamReady', () => addDebugEntry('stream ready'));
-  sess.on('mediaReady', () => el.avatarLoading.classList.add('hidden'));
+  let connectTimeoutId = null;
+  const clearConnectTimeout = () => { clearTimeout(connectTimeoutId); connectTimeoutId = null; };
+  const armConnectTimeout = () => {
+    clearConnectTimeout();
+    connectTimeoutId = setTimeout(() => {
+      addDebugEntry('avatar connect timed out waiting for mediaReady');
+      showAvatarFailed("Couldn't reach the avatar. Refresh the page to try again.");
+    }, AVATAR_CONNECT_TIMEOUT_MS);
+  };
+  const showAvatarConnecting = () => {
+    el.avatarLoading.classList.remove('failed');
+    el.avatarLoading.classList.remove('hidden');
+    el.avatarLoadingLabel.textContent = 'Connecting to the avatar…';
+    armConnectTimeout();
+  };
+  const showAvatarFailed = (message) => {
+    clearConnectTimeout();
+    el.avatarLoadingLabel.textContent = message;
+    el.avatarLoading.classList.remove('hidden');
+    el.avatarLoading.classList.add('failed');
+    showToast(message, 'error', { sticky: true });
+  };
+  armConnectTimeout();
+  sess.on('mediaReady', () => { clearConnectTimeout(); el.avatarLoading.classList.add('hidden'); });
   sess.on('error', (err) => {
     addDebugEntry(`error: ${err?.message || err}`);
-    showToast('Something went wrong with the avatar connection.', 'error');
+    showAvatarFailed('Something went wrong with the avatar connection. Refresh to try again.');
   });
   sess.on('warning', (warning) => {
     if (warning?.code === 'playback_blocked') {
@@ -1158,7 +1215,9 @@ function registerSessionEvents(sess) {
     // fresh 'mediaReady', which is what actually hides this again. Without
     // re-showing it here first, the video element can render a stale or
     // not-yet-synced frame (an "odd face") in the gap before that event.
-    el.avatarLoading.classList.remove('hidden');
+    // armConnectTimeout guards against a reconnect that stalls or fails
+    // without ever getting there.
+    showAvatarConnecting();
   });
   sess.on('reconnected', () => showToast('Reconnected.', 'info'));
   // No dedicated E2E test: forcing a live backend stall on demand isn't
@@ -1176,8 +1235,8 @@ function registerSessionEvents(sess) {
   sess.on('timeWarning', ({ remainingTime }) => {
     showToast(`This session is ending in about ${Math.max(1, Math.round((remainingTime || 0) / 1000))}s.`, 'warn');
   });
-  sess.on('timeExpired', () => showSessionEnded('expired'));
-  sess.on('ended', () => { if (!pageUnloading) showSessionEnded(goodbyePending ? 'goodbye' : 'error'); });
+  sess.on('timeExpired', () => { clearConnectTimeout(); showSessionEnded('expired'); });
+  sess.on('ended', () => { clearConnectTimeout(); if (!pageUnloading) showSessionEnded(goodbyePending ? 'goodbye' : 'error'); });
 }
 
 // ── Event binding ──
@@ -1304,6 +1363,8 @@ function bindEvents() {
 
 // ── Boot ──
 async function init() {
+  prefetchAppInit(); // fire now so it overlaps page load + the welcome/disclaimer dwell time
+
   el.btnDownloadPdf.href = PDF_URL;
 
   const debugMode = new URLSearchParams(window.location.search).has('debug');

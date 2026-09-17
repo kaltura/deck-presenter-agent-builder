@@ -380,6 +380,9 @@ button, input, textarea { font-family: inherit; }
   z-index: 2;
 }
 .avatar-loading.hidden { display: none; }
+.avatar-loading-label { font-size: 12px; }
+.avatar-loading.failed .avatar-loading-spinner { display: none; }
+.avatar-loading.failed .avatar-loading-label { color: var(--color-danger); }
 .avatar-loading-spinner {
   width: 24px;
   height: 24px;

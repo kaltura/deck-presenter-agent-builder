@@ -16,7 +16,12 @@ export function buildCaptionMap(guideText) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('<!--')) continue;
     const m = trimmed.match(LINE_RE);
-    if (!m) continue;
+    if (!m) {
+      if (trimmed.includes('->')) {
+        throw new Error(`pronunciation-guide.md line does not match TERM -> "spoken form": ${JSON.stringify(trimmed)}`);
+      }
+      continue;
+    }
     const [, term, spokenForm] = m;
     map[spokenForm.trim()] = term.trim();
   }

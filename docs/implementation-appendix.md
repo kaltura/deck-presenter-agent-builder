@@ -571,6 +571,7 @@ const sess = new KalturaAvatarSession({ ...token, videoEl, audioEl, toolCallName
 Handling notes that cost real debugging time:
 
 - **`streamReady` is not `mediaReady`.** The stream can exist before media is playable. Gate the UI on `mediaReady`.
+- **`mediaReady` can simply never arrive.** Negotiation can stall or the SDK can drop straight to `error` without it. Arm a bounded timeout (client's `AVATAR_CONNECT_TIMEOUT_MS`) on `connecting` and on `reconnecting`, clear it on `mediaReady`/`error`/`ended`/`timeExpired`, and swap the spinner for a visible failed state on expiry — otherwise the loading cover spins forever with only a toast that fades after 4s.
 - **Autoplay blocking is normal.** Keep a one-time click that calls `sess.startPlayback()`.
 - **The navigation tool call can arrive before `avatarStopTalking`.** Drive slide state from the tool call. Waiting for the speech event makes the deck lag the narration.
 - **On `brainStalled`, re-send once with a resume instruction** that names the current slide and says to continue presenting it and not to navigate. Without the no-navigate clause the recovery jumps the deck.
