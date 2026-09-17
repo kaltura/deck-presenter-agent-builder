@@ -36,12 +36,21 @@ export const NAV_RULES = existsSync(resolve(ROOT, 'data/nav-rules.json'))
   ? JSON.parse(readFileSync(resolve(ROOT, 'data/nav-rules.json'), 'utf8'))
   : { rules: [] };
 
+// features.feedback off: the platform captures nothing extra, so the agent must not
+// treat feedback as a lead to chase. On: a lifecycle rule (content.mjs's
+// FEEDBACK_LIFECYCLE_RULE_A) extracts it from the full transcript after the session
+// ends, so the agent's only job is to draw it out in conversation, not to log it.
+const FEEDBACK_DIRECTIVE = project.features?.feedback
+  ? 'Once during the conversation, naturally, near a natural close or when the visitor brings it up themselves, ask what stood out to them, what could be better, and whether they would recommend it to others. Ask conversationally, not as a survey, and do not open the contact tool or any other tool for this: just listen and respond, then keep presenting or close as normal.'
+  : 'When a visitor gives feedback, thank them briefly and continue; do not open the contact tool for feedback alone. Open it only after the visitor agrees to a follow-up, a demo, or being contacted.';
+
 const VARS = {
   TOTAL_SLIDES,
   PERSONA_NAME: project.personaName,
   PRODUCT_NAME: project.productName,
   PRODUCT_OR_TOPIC: project.productOrTopic || project.productName,
   COMPANY_NAME: project.companyName,
+  FEEDBACK_DIRECTIVE,
 };
 
 export const AGENT_DISPLAY_NAME = `${project.personaName} — ${project.productName || project.productOrTopic} presenter`;
@@ -203,32 +212,35 @@ export const FOLLOWUP_EMAIL_TEMPLATE = {
 
 const FOLLOWUP_REQUIRED_KEYS = ['SUMMARY', 'TOPIC', 'FEEDBACK', 'CONTACT'];
 
-export const FOLLOWUP_LIFECYCLE_RULE_A = {
+export const FOLLOWUP_INSIGHT_SETTINGS = [
+  {
+    key: 'TOPIC',
+    title: 'Topic',
+    valueType: 'string',
+    prompt: `In one short sentence, what was the visitor mainly trying to learn about ${VARS.PRODUCT_OR_TOPIC}, and did ${VARS.PERSONA_NAME} help them get there?`,
+  },
+  {
+    key: 'FEEDBACK',
+    title: 'Feedback',
+    valueType: 'string',
+    prompt: 'Any explicit feedback, praise, criticism, or suggestions the visitor gave about the presentation, the avatar, or the experience. If none was given, answer exactly "No feedback was provided."',
+  },
+  {
+    key: 'CONTACT',
+    title: 'Contact',
+    valueType: 'string',
+    prompt: 'Any contact details or company/role info the visitor provided (name, email, company, role, phone), as given via the contact form or in conversation. Format as a short plain-text list. If none was given, answer exactly "No contact details were submitted."',
+  },
+];
+
+/** Built after the InsightSettings step, once each entity's final id is known. */
+export const followupLifecycleRuleA = (insightSettingsIds) => ({
   name: `${AGENT_DISPLAY_NAME} — extract insights on session end`,
   systemName: `${project.slug}_session_insights`,
   eventType: 'session_ended',
   objectType: 'thread',
-  action: {
-    actionType: 'triggerInsight',
-    insights: [
-      {
-        insightKey: 'TOPIC',
-        valueType: 'string',
-        prompt: `In one short sentence, what was the visitor mainly trying to learn about ${VARS.PRODUCT_OR_TOPIC}, and did ${VARS.PERSONA_NAME} help them get there?`,
-      },
-      {
-        insightKey: 'FEEDBACK',
-        valueType: 'string',
-        prompt: 'Any explicit feedback, praise, criticism, or suggestions the visitor gave about the presentation, the avatar, or the experience. If none was given, answer exactly "No feedback was provided."',
-      },
-      {
-        insightKey: 'CONTACT',
-        valueType: 'string',
-        prompt: 'Any contact details or company/role info the visitor provided (name, email, company, role, phone), as given via the contact form or in conversation. Format as a short plain-text list. If none was given, answer exactly "No contact details were submitted."',
-      },
-    ],
-  },
-};
+  action: { actionType: 'triggerInsightSettingsKai', insightSettingsIds },
+});
 
 /** Built after the email template step, once its final id is known. */
 export const followupLifecycleRuleB = (templateId) => ({
@@ -238,4 +250,92 @@ export const followupLifecycleRuleB = (templateId) => ({
   objectType: 'thread',
   eventConditions: [{ field: 'changed_keys', operator: 'has_all', value: FOLLOWUP_REQUIRED_KEYS }],
   action: { actionType: 'sendInsightEmail', recipients: followUp.recipients || [], templateId },
+});
+
+// ── Conversational feedback capture (PLAN.md 10, docs/implementation-appendix.md
+// "follow-up email" for the underlying mechanism). Only consulted by
+// update-feedback.mjs, and only when features.feedback is on. Independent of
+// followUpEmail: uses its own insight key (SESSIONFEEDBACK, not FEEDBACK) so both
+// features can run on the same project without two rules racing to write one key. ──
+const feedback = project.feedback || {};
+
+export const FEEDBACK_ADMIN_TAG = `${project.slug}-feedback-email`;
+
+export const FEEDBACK_EXTRACT_PROMPT = feedback.extractPrompt
+  ? sub(feedback.extractPrompt, VARS)
+  : `In the visitor's own words as much as possible, capture their feedback on this ${VARS.PRODUCT_OR_TOPIC} conversation: what stood out, what could be better, any suggestions, and whether they'd recommend it to others. If the visitor gave no feedback, answer exactly "No feedback was provided."`;
+
+const FEEDBACK_EMAIL_BODY_HTML = `<!DOCTYPE html>
+<html lang="${project.language || 'en'}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${VARS.PRODUCT_OR_TOPIC} feedback</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f0f0;font-family:Arial,sans-serif;font-size:16px;color:#222222;">
+  <div style="max-width:620px;margin:0 auto;background-color:#f0f0f0;">
+    <div style="height:5px;background-color:${EMAIL_ACCENT};"></div>
+
+    <div style="${EMAIL_SECTION}">
+      <div style="font-size:15px;font-weight:700;letter-spacing:0.5px;color:${EMAIL_ACCENT};text-transform:uppercase;margin-bottom:4px;">${VARS.PRODUCT_OR_TOPIC}</div>
+      <div style="font-size:13px;color:#777777;margin-bottom:20px;">Feedback from a conversation with {AGENTNAME}</div>
+      <h2 style="${EMAIL_H2}">Conversation summary</h2>
+      <p style="${EMAIL_TEXT}">{SUMMARY}</p>
+    </div>
+
+    <div style="${EMAIL_SECTION}">
+      <h2 style="${EMAIL_H2}">Visitor feedback</h2>
+      <p style="${EMAIL_TEXT}">{SESSIONFEEDBACK}</p>
+    </div>
+
+    <div style="${EMAIL_SECTION}">
+      <div style="font-size:15px;color:#333333;margin-top:0;line-height:1.8;">&mdash; {AGENTNAME}</div>
+      <br/>
+      <p style="font-size:13px;line-height:1.6;color:#888888;">${VARS.PRODUCT_OR_TOPIC}</p>
+    </div>
+  </div>
+</body>
+</html>
+`;
+
+export const FEEDBACK_EMAIL_TEMPLATE = {
+  name: `${AGENT_DISPLAY_NAME} — Visitor Feedback`,
+  adminTags: FEEDBACK_ADMIN_TAG,
+  subject: `New feedback on a ${VARS.PRODUCT_OR_TOPIC} conversation with ${VARS.PERSONA_NAME}`,
+  fromName: `${VARS.PERSONA_NAME}, ${VARS.PRODUCT_OR_TOPIC}`,
+  toAttributePath: '{USER.email}',
+  body: FEEDBACK_EMAIL_BODY_HTML,
+  msgParamsMap: {
+    AGENTNAME: { type: 'String' },
+    USER: { type: 'User' },
+    SUMMARY: { type: 'String' },
+    SESSIONFEEDBACK: { type: 'String' },
+  },
+  emailProviderId: feedback.emailProviderId || '',
+  unsubscribeGroups: [],
+};
+
+const FEEDBACK_REQUIRED_KEYS = ['SUMMARY', 'SESSIONFEEDBACK'];
+
+export const FEEDBACK_INSIGHT_SETTINGS = [
+  { key: 'SESSIONFEEDBACK', title: 'Session feedback', valueType: 'string', prompt: FEEDBACK_EXTRACT_PROMPT },
+];
+
+/** Built after the InsightSettings step, once the entity's final id is known. */
+export const feedbackLifecycleRuleA = (insightSettingsIds) => ({
+  name: `${AGENT_DISPLAY_NAME} — extract feedback on session end`,
+  systemName: `${project.slug}_feedback_insight`,
+  eventType: 'session_ended',
+  objectType: 'thread',
+  action: { actionType: 'triggerInsightSettingsKai', insightSettingsIds },
+});
+
+/** Built after the email template step, once its final id is known. */
+export const feedbackLifecycleRuleB = (templateId) => ({
+  name: `${AGENT_DISPLAY_NAME} — email visitor feedback`,
+  systemName: `${project.slug}_feedback_email`,
+  eventType: 'analysis_updated',
+  objectType: 'thread',
+  eventConditions: [{ field: 'changed_keys', operator: 'has_all', value: FEEDBACK_REQUIRED_KEYS }],
+  action: { actionType: 'sendInsightEmail', recipients: feedback.recipients || [], templateId },
 });

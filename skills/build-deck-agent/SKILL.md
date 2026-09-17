@@ -71,7 +71,7 @@ Run, in order, only the commands whose inputs changed since they last succeeded 
 node scripts/provision.mjs --project .
 ```
 
-This single command does all nine provisioning steps (nav tool → KB → intellect → avatar → agent → widget id) per `docs/implementation-appendix.md`, resuming from `.provisioning-state.json` if a prior run stopped partway. For a narrower change after the first successful run, use the matching update command instead of re-running the whole thing: `scripts/update-prompts.mjs`, `scripts/update-capabilities.mjs`, `scripts/update-avatar.mjs`, `scripts/update-agent.mjs`, `scripts/attach-tool.mjs`, and (when `features.followUpEmail` is on) `scripts/update-followup.mjs`. Load `reference-provisioning.md` for which command owns which field.
+This single command does all nine provisioning steps (nav tool → KB → intellect → avatar → agent → widget id) per `docs/implementation-appendix.md`, resuming from `.provisioning-state.json` if a prior run stopped partway. For a narrower change after the first successful run, use the matching update command instead of re-running the whole thing: `scripts/update-prompts.mjs`, `scripts/update-capabilities.mjs`, `scripts/update-avatar.mjs`, `scripts/update-agent.mjs`, `scripts/attach-tool.mjs`, (when `features.followUpEmail` is on) `scripts/update-followup.mjs`, and (when `features.feedback` is on) `scripts/update-feedback.mjs`. Load `reference-provisioning.md` for which command owns which field.
 
 Always run the target command once without `--yes` first, read the plan, then re-run with `--yes` only after confirming it with whoever is present.
 

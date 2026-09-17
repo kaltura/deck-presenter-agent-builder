@@ -37,6 +37,6 @@ node --env-file=.env engine/bundle.mjs --project demo   # rebuild demo/dist.html
 npm run test:e2e
 ```
 
-This costs real API calls against a real account, so it never runs on a pull request. `.github/workflows/live-e2e.yml` runs it only via `workflow_dispatch`, using `KALTURA_PARTNER_ID`/`KALTURA_ADMIN_SECRET` repo secrets to rebuild `dist.html` before the browser run. Locally, put the same two values in a root `.env` (see `.env.example`).
+This costs real API calls against a real account. `.github/workflows/live-e2e.yml` runs it automatically on every push to `main` and every pull request whose head repo is this repo, using `KALTURA_PARTNER_ID`/`KALTURA_ADMIN_SECRET` repo secrets to rebuild `dist.html` before the browser run. A fork PR is skipped there, not failed: GitHub withholds those secrets from a forked-repo pull request on a public repo regardless of this workflow's own config, and a fork PR still gets the secretless checks in `ci.yml`. Locally, put the same two values in a root `.env` (see `.env.example`).
 
-The suite launches Chromium with a fake microphone device (`--use-fake-device-for-media-stream`): there is no way to feed a real physical mic into headless CI. Everything downstream of that (signaling, the avatar's RTC session, the deck's own logic) is real and unmocked.
+The suite launches Chromium and Firefox with a fake microphone device (Chromium's `--use-fake-device-for-media-stream`, Firefox's `media.navigator.streams.fake` pref): there is no way to feed a real physical mic into headless CI. Everything downstream of that (signaling, the avatar's RTC session, the deck's own logic) is real and unmocked.

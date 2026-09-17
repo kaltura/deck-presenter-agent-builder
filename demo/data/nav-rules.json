@@ -1,5 +1,6 @@
 {
   "rules": [
+    { "when": "the visitor asks what Canopy does or wants a one-sentence summary", "goToSlide": 3 },
     { "when": "the visitor asks how it works or how the sensors work", "goToSlide": 4 },
     { "when": "the visitor asks about the data pipeline or the moisture forecast", "goToSlide": 5 },
     { "when": "the visitor asks about the dashboard or alerts", "goToSlide": 6 },

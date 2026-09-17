@@ -60,20 +60,23 @@ export function numberInPool(value, pool, tolerance = 0.005) {
   return pool.some((p) => Math.abs(p.value - value) <= Math.max(1, Math.abs(p.value)) * tolerance);
 }
 
-/** Every number traceable to the slide's own content.key_metrics, footnote(s), and talking_points. */
+/** Every string value nested anywhere inside `value`, in encounter order. */
+function collectStrings(value, out = []) {
+  if (typeof value === 'string') out.push(value);
+  else if (Array.isArray(value)) for (const v of value) collectStrings(v, out);
+  else if (value && typeof value === 'object') for (const v of Object.values(value)) collectStrings(v, out);
+  return out;
+}
+
+/** Every number traceable anywhere in the slide's own data: content (any shape), footnote(s), talking points, and guidance. */
 export function numericTraceabilityCheck(responseText, slide) {
-  const poolText = [
-    ...(Array.isArray(slide?.content?.key_metrics) ? slide.content.key_metrics : []),
-    ...(typeof slide?.content?.key_metrics === 'object' && !Array.isArray(slide?.content?.key_metrics)
-      ? Object.values(slide.content.key_metrics)
-      : []),
-    slide?.footnote,
-    ...(Array.isArray(slide?.footnotes) ? slide.footnotes : []),
-    ...(Array.isArray(slide?.talking_points) ? slide.talking_points : []),
-    slide?.content?.headline,
-  ]
-    .filter(Boolean)
-    .join(' \n ');
+  const poolText = collectStrings({
+    content: slide?.content,
+    footnote: slide?.footnote,
+    footnotes: slide?.footnotes,
+    talking_points: slide?.talking_points,
+    narrator_guidance: slide?.narrator_guidance,
+  }).join(' \n ');
   const pool = extractNumbers(poolText);
   // A presenter legitimately says "on slide N" as navigation, not as a data claim.
   if (Number.isFinite(slide?.slide)) pool.push({ value: slide.slide, isPercent: false });
@@ -413,13 +416,12 @@ async function main() {
   }
 }
 
-/** Only the fields the coverage judge actually needs; the full slide record (footnote citations, layout, ids) can be large enough to trip the API's message-length cap on the densest slides. */
+/** Only the fields the coverage judge actually needs; the full slide record (footnote citations, layout, ids) can be large enough to trip the API's message-length cap on the densest slides. `content` is kept whole (not cherry-picked by key) so every content shape a project uses (bullets, tiers, stages, key_metrics, ...) reaches the judge as ground truth. */
 function gradingRelevantSlideData(slide) {
   return {
     title: slide?.title,
     talking_points: slide?.talking_points,
-    key_metrics: slide?.content?.key_metrics,
-    summary: slide?.content?.text || slide?.content?.headline,
+    content: slide?.content,
   };
 }
 

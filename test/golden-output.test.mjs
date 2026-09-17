@@ -46,7 +46,8 @@ async function snapshotOf(projectPath) {
     FOLLOWUP_EMAIL_ADMIN_TAG: content.FOLLOWUP_EMAIL_ADMIN_TAG,
     FOLLOWUP_SUMMARY_PROMPT: content.FOLLOWUP_SUMMARY_PROMPT,
     FOLLOWUP_EMAIL_TEMPLATE: content.FOLLOWUP_EMAIL_TEMPLATE,
-    FOLLOWUP_LIFECYCLE_RULE_A: content.FOLLOWUP_LIFECYCLE_RULE_A,
+    FOLLOWUP_INSIGHT_SETTINGS: content.FOLLOWUP_INSIGHT_SETTINGS,
+    FOLLOWUP_LIFECYCLE_RULE_A_SAMPLE: content.followupLifecycleRuleA(['golden-test-topic-id', 'golden-test-feedback-id', 'golden-test-contact-id']),
     FOLLOWUP_LIFECYCLE_RULE_B_SAMPLE: content.followupLifecycleRuleB('golden-test-template-id'),
   };
 }

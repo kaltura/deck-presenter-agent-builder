@@ -18,6 +18,11 @@ const FIXTURE = resolve(ROOT, 'fixtures/smoke-project');
 const FIXTURE_PARTNER_ID = ['1', '2', '3', '4', '5', '6'].join('');
 const OTHER_PARTNER_ID = ['9', '9', '9', '9', '9', '9'].join('');
 
+// deploy.mjs reads this the same way, from the same file, to guard against a forgotten
+// version bump. Reading it here instead of hardcoding a value keeps the test correct
+// whenever client/app.js's VERSION changes.
+const CLIENT_VERSION = readFileSync(resolve(ROOT, 'client/app.js'), 'utf8').match(/const VERSION = '([^']+)'/)[1];
+
 function cleanEnv(extra = {}) {
   const env = { ...process.env };
   delete env.KALTURA_PARTNER_ID;
@@ -136,6 +141,55 @@ guardClauseSuite('update-prompts', 'engine/update-prompts.mjs', 'configId', 'con
 guardClauseSuite('update-agent', 'engine/update-agent.mjs', 'agentId', 'agentId');
 guardClauseSuite('update-capabilities', 'engine/update-capabilities.mjs', 'configId', 'configId', { checkProjectJson: false });
 guardClauseSuite('update-avatar', 'engine/update-avatar.mjs', 'avatarId', 'avatarId');
+
+// deploy.mjs's --dry-run path is fully offline: the VERSION guard can fail before any
+// network call, and the one real call (adminKs) happens strictly after confirmPlan(),
+// which --dry-run short-circuits before reaching. deck.pdf only needs to exist on disk;
+// its bytes are never read on this path, so a placeholder file in the temp copy is enough
+// and the tracked fixture stays untouched.
+test('deploy --dry-run prints a plan and exits 0 when VERSION has changed since the last deploy', () => {
+  const dir = tempProject();
+  writeEnv(dir);
+  writeFileSync(resolve(dir, 'data', 'deck.pdf'), '%PDF-1.4 fake deck for tests\n');
+  writeState(dir, {
+    partnerId: FIXTURE_PARTNER_ID,
+    slug: 'smoke-project',
+    steps: {
+      widgetId: { value: 'widget-fake-1', origin: 'created' },
+      deployedVersion: { value: '0.0.0-fake', origin: 'created' },
+    },
+  });
+  try {
+    const { code, stderr } = run('engine/deploy.mjs', ['--project', dir, '--dry-run']);
+    assert.equal(code, 0, stderr);
+    assert.match(stderr, /Deploy plan for project "smoke-project"/);
+    assert.match(stderr, /Dry run: no network mutation performed\./);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('deploy --dry-run refuses when VERSION has not changed since the last deploy', () => {
+  const dir = tempProject();
+  writeEnv(dir);
+  writeFileSync(resolve(dir, 'data', 'deck.pdf'), '%PDF-1.4 fake deck for tests\n');
+  writeState(dir, {
+    partnerId: FIXTURE_PARTNER_ID,
+    slug: 'smoke-project',
+    steps: {
+      widgetId: { value: 'widget-fake-1', origin: 'created' },
+      deployedVersion: { value: CLIENT_VERSION, origin: 'created' },
+    },
+  });
+  try {
+    const { code, stderr } = run('engine/deploy.mjs', ['--project', dir, '--dry-run']);
+    assert.equal(code, 4, stderr);
+    assert.match(stderr, new RegExp(`VERSION in client/app\\.js is still '${CLIENT_VERSION}', same as the last deploy\\.`));
+    assert.doesNotMatch(stderr, /Deploy plan for project/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test('update-avatar refuses an out-of-range voiceSpeed before any network call, with no .env at all', () => {
   const dir = tempProject();

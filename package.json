@@ -35,9 +35,10 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@kaltura/intelligent-agents": "github:kaltura/intelligent-agents-sdk#v1.19.0"
+    "@kaltura/intelligent-agents": "github:kaltura/intelligent-agents-sdk#v1.22.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
     "esbuild": "^0.28.2"
   }

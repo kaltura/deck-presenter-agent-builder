@@ -338,7 +338,19 @@ After the write, assert that `base_directive`, `prompts`, `knowledge_ids`, `capa
 
 ## Optional stage: follow-up email after a session
 
-Off by default (PLAN.md 10). Two lifecycle rules plus one email template. This is the only part of the pipeline that uses a second Kaltura API.
+Off by default (PLAN.md 10). One InsightSettings entity per insight, two lifecycle rules, one email template. SDK v1.22.0 folded the email template API into the management SDK, so this whole stage now runs on a single `ks`, with no second Kaltura API and no separate session key.
+
+**Step 1, create/reuse each insight as a standalone entity:**
+
+```js
+const created = await mgmt.insightSettings.create(
+  { key: 'TOPIC', title: 'Topic', valueType: 'string', prompt: '...' },
+  admin.ks,
+);
+// created.id -> pass into rule A below
+```
+
+`triggerInsight` with an inline `insights: [...]` array no longer exists; the SDK rejects that shape client-side before any network call. Each insight is its own entity now, looked up by `key` via `mgmt.insightSettings.list(admin.ks)` and reused rather than duplicated.
 
 **Rule A, extract insights when the session ends:**
 
@@ -346,14 +358,7 @@ Off by default (PLAN.md 10). Two lifecycle rules plus one email template. This i
 await mgmt.lifecycle.create({
   name, systemName,
   eventType: 'session_ended', objectType: 'thread',
-  action: {
-    actionType: 'triggerInsight',
-    insights: [
-      { insightKey: 'TOPIC',    valueType: 'string', prompt: '...' },
-      { insightKey: 'FEEDBACK', valueType: 'string', prompt: '...' },
-      { insightKey: 'CONTACT',  valueType: 'string', prompt: '...' },
-    ],
-  },
+  action: { actionType: 'triggerInsightSettingsKai', insightSettingsIds: [topicId, feedbackId, contactId] },
 }, admin.ks);
 ```
 
@@ -371,11 +376,13 @@ await mgmt.lifecycle.create({
 }, admin.ks);
 ```
 
+`sendInsightEmail`'s shape is unchanged from v1.19.0.
+
 Five design points:
 
 - **Do not request a `SUMMARY` insight.** Every account gets one from an always-on system preset that merges into the same batch. Requesting it duplicates work. Rule B still waits on it, which is why it is in `changed_keys`.
 - **Do not condition rules on `object.agent_id`.** The client mints widget tokens, so real production threads arrive with `agent_id: "default"` and an agent-id condition never matches. This is the single easiest way to ship rules that silently never fire.
-- **Idempotency is by `systemName`.** `for await (const rule of mgmt.lifecycle.list(admin.ks))` and match on it before creating.
+- **Idempotency is by `key` (InsightSettings) and `systemName` (lifecycle rules).** `for await (const rule of mgmt.lifecycle.list(admin.ks))` and match before creating; same pattern for `mgmt.insightSettings.list(admin.ks)`.
 - **Dry-run both rules before declaring success:** `mgmt.lifecycle.match(objectType, eventType, { object: syntheticObject }, admin.ks)`. A rule that exists but does not match is the normal failure, not an exception.
 - **Flatten match results defensively.** Every entry nests its rules under `.rules[]` regardless of grouping, so `mr.flatMap((e) => e.rules ? e.rules.map((r) => r.id) : [e.id])`.
 
@@ -383,10 +390,11 @@ The agent's own summary wording is a separate field: `mgmt.agents.update({ agent
 
 ### The email template
 
-Separate infrastructure: the classic Kaltura Messaging API, not the management SDK. Base `https://messaging.<region>.ovp.kaltura.com/api/v1`, with `email-template/list` filtered by admin tags, then `email-template/update` in place or `email-template/create`.
+`mgmt.emailTemplates.*`, mounted on the same management SDK, authenticated with the same admin `ks` as everything else above. No separate classic-Messaging session key. `for await (const t of mgmt.emailTemplates.list(admin.ks))` filtered by admin tags, then `.update(id, patch, admin.ks)` in place or `.create({ appGuid, ... }, admin.ks)`.
 
 - **Look `appGuid` up live from `mgmt.agents.get(agentId).appGuid`. Never hardcode it.** It regenerates whenever the agent is re-provisioned, and a stale one makes `sendInsightEmail` fail silently: the rule fires, the template resolves, no mail arrives. If the value changed, leave the old template alone and create a fresh one.
-- `emailProviderId` is an account-level setting, so reading it from config is fine.
+- **`appGuid` and `toAttributePath` are create-only.** `emailTemplates.update()`'s field list does not include them; a template created with the wrong value needs a fresh template, not an update.
+- `emailProviderId` is optional. It's an account-level setting (a custom sending domain configured via `email-provider/add`), and Kaltura falls back to a shared provider when it's empty. Read it from config, but don't require it.
 - Placeholders in the body are `{TOKEN}`. Use **inline CSS only**, so the body contains no other braces for the template engine to choke on.
 
 ## Failure, resume, and state

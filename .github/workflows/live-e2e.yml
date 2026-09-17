@@ -1,9 +1,16 @@
 name: Live E2E
 
-# Never on pull_request or push: this job runs real, billable Kaltura calls
-# against the demo project's live account and needs real secrets, which a
-# fork PR must never see. Trigger manually from the Actions tab.
+# Runs real, billable Kaltura calls against the demo project's live account,
+# so it needs real secrets. On a public repo, GitHub already withholds every
+# secret from a pull_request run whose head repo is a fork; there is no
+# setting on either side that changes that. So this runs automatically on
+# every push to main and every same-repo pull request (the job-level `if`
+# below), and is skipped, not failed, on a fork PR, which gets the secretless
+# checks in ci.yml instead. workflow_dispatch stays for manual reruns.
 on:
+  pull_request: {}
+  push:
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
@@ -13,6 +20,7 @@ jobs:
   e2e:
     name: Browser E2E against the live demo widget
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -22,7 +30,7 @@ jobs:
 
       - run: npm ci
 
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium firefox
 
       # Idempotent: makes no live call if demo's provisioning state already
       # matches project.json. Needed so a first-ever run on a clean checkout

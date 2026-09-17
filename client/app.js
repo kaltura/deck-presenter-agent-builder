@@ -11,7 +11,7 @@ import { levelAt, statsSummary } from './mic-stats.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.16';
+const VERSION = '0.1.17';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -741,6 +741,7 @@ function handleGoodbye() {
   if (!TOOL_NAMES.endSession || goodbyePending) return;
   goodbyePending = true;
   deckPausedAfterGoodbye = true;
+  cancelAutoPlay(); // an in-flight countdown must not fire and advance the deck after goodbye
   addDebugEntry('goodbye detected — grace period started');
   goodbyeGraceTimer = setTimeout(() => {
     session?.disconnect();

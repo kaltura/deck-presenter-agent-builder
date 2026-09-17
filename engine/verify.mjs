@@ -142,6 +142,11 @@ async function main() {
     const configId = state.steps.configId?.value;
     if (!configId) fail(flags, EXIT.UNEXPECTED, 'No configId in .provisioning-state.json. Run engine/provision.mjs first.');
     const question = flags._[1] || 'Hello! In one sentence, what is this presentation about?';
+    if (flags['dry-run']) {
+      progress(flags, `[dry-run] would send one conversational turn to configId ${configId}: "${question}"`);
+      result(flags, { dryRun: true, question, configId });
+      return;
+    }
     const r = await mgmt.converseOnce(configId, question, { recoverFromSpiral: true });
     result(flags, { question, text: r?.text, status: r?.status, error: r?.error });
     return;

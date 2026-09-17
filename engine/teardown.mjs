@@ -10,8 +10,6 @@ import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT,
 import { connect, adminKs } from './lib/kaltura.mjs';
 import { loadState, writeState, statePath } from './lib/state.mjs';
 import { deleteEntry, deleteShortLink } from './lib/ovp.mjs';
-import { loadCredentials } from './lib/env.mjs';
-import { messagingBaseUrl, mintClassicKs, messagingApi } from './lib/messaging.mjs';
 
 /** Reverse of creation order: deploy.mjs runs after provision.mjs, so its ids die first. */
 const DELETE_ORDER = [
@@ -21,7 +19,12 @@ const DELETE_ORDER = [
   'widgetId', // no delete call exists for a widget id; it is dropped by deleting the agent.
   'followUpLifecycleRuleBId',
   'followUpLifecycleRuleAId',
+  'followUpInsightSettingIds',
   'followUpEmailTemplateId',
+  'feedbackLifecycleRuleBId',
+  'feedbackLifecycleRuleAId',
+  'feedbackInsightSettingIds',
+  'feedbackTemplateId',
   'agentId',
   'avatarId',
   'configId',
@@ -42,15 +45,10 @@ const DELETERS = {
   pdfEntryId: (mgmt, id, ks) => deleteEntry(ks, id),
   followUpLifecycleRuleAId: (mgmt, id, ks) => mgmt.lifecycle.delete(id, ks, CONFIRM),
   followUpLifecycleRuleBId: (mgmt, id, ks) => mgmt.lifecycle.delete(id, ks, CONFIRM),
-  // The classic Messaging API, not the agentic SDK: mints its own session key.
-  // "email-template/delete" follows the list/update/add naming this API uses
-  // elsewhere but is unconfirmed against a live account; if it 404s, the
-  // stale template is harmless (it just sits untagged-and-unused) and can be
-  // removed by hand in the KMC.
-  followUpEmailTemplateId: async (mgmt, id, ks, ctx) => {
-    const classicKs = await mintClassicKs(ctx.creds.partnerId, ctx.creds.adminSecret, ctx.creds.serviceUrl);
-    await messagingApi(messagingBaseUrl(ctx.creds), 'email-template/delete', { id }, classicKs);
-  },
+  followUpEmailTemplateId: (mgmt, id, ks) => mgmt.emailTemplates.delete(id, ks, CONFIRM),
+  feedbackLifecycleRuleAId: (mgmt, id, ks) => mgmt.lifecycle.delete(id, ks, CONFIRM),
+  feedbackLifecycleRuleBId: (mgmt, id, ks) => mgmt.lifecycle.delete(id, ks, CONFIRM),
+  feedbackTemplateId: (mgmt, id, ks) => mgmt.emailTemplates.delete(id, ks, CONFIRM),
   agentId: (mgmt, id, ks) => mgmt.agents.delete(id, ks, CONFIRM),
   avatarId: (mgmt, id, ks) => mgmt.avatars.delete(id, ks, CONFIRM),
   configId: (mgmt, id, ks) => mgmt.intellects.delete(id, ks, CONFIRM),
@@ -93,7 +91,6 @@ async function main() {
   }
 
   const ks = await adminKs(mgmt);
-  const ctx = { creds: loadCredentials(projectRoot) };
   const deleted = [];
   const survivors = [];
 
@@ -114,10 +111,26 @@ async function main() {
       writeState(projectRoot, state);
       continue;
     }
+    if (key === 'followUpInsightSettingIds' || key === 'feedbackInsightSettingIds') {
+      progress(flags, `[${key}] deleting ${Object.keys(step.value).length} insight setting(s)...`);
+      for (const [insightKey, id] of Object.entries(step.value)) {
+        try {
+          await mgmt.insightSettings.delete(id, ks, CONFIRM);
+        } catch (err) {
+          const alreadyGone = /not_found|does not exist|no such/i.test(String(err?.detail || err?.message || err));
+          if (!alreadyGone) throw err;
+        }
+        progress(flags, `[${key}] deleted ${insightKey} (${id})`);
+      }
+      deleted.push({ key, id: step.value });
+      delete state.steps[key];
+      writeState(projectRoot, state);
+      continue;
+    }
     const del = DELETERS[key];
     try {
       progress(flags, `[${key}] deleting ${step.value}...`);
-      await del(mgmt, step.value, ks, ctx);
+      await del(mgmt, step.value, ks);
       deleted.push({ key, id: step.value });
       delete state.steps[key];
       writeState(projectRoot, state);

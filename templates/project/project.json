@@ -14,12 +14,18 @@
     "contactForm": true,
     "endSessionTool": true,
     "knowledgeBase": false,
-    "followUpEmail": false
+    "followUpEmail": false,
+    "feedback": false
   },
   "followUpEmail": {
     "recipients": [],
     "emailProviderId": "",
     "summaryPrompt": ""
+  },
+  "feedback": {
+    "recipients": [],
+    "emailProviderId": "",
+    "extractPrompt": ""
   },
   "sessionMaxSeconds": 900,
   "capabilities": {

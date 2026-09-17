@@ -19,6 +19,7 @@ export function connect(projectRoot, flags) {
     partnerId: creds.partnerId,
     adminSecret: creds.adminSecret,
     ovpUrl: creds.serviceUrl,
+    ...(creds.messagingUrl ? { messagingUrl: creds.messagingUrl } : {}),
   });
   return { mgmt, partnerId: creds.partnerId, widgetId: creds.widgetId, serviceUrl: creds.serviceUrl };
 }

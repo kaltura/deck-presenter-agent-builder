@@ -21,7 +21,13 @@
     "contactForm": true,
     "endSessionTool": true,
     "knowledgeBase": true,
-    "followUpEmail": false
+    "followUpEmail": false,
+    "feedback": true
+  },
+  "feedback": {
+    "recipients": ["feedback@example.com"],
+    "emailProviderId": "",
+    "extractPrompt": ""
   },
   "sessionMaxSeconds": 900,
   "capabilities": {
@@ -32,7 +38,7 @@
   "avatar": { "source": "fresh" },
   "branding": {},
   "disclosure": {
-    "text": "You're talking with Wren, an AI presenter for Canopy. Wren doesn't collect personal data unless you choose to share it through the contact form.",
+    "text": "You're talking with Wren, an AI presenter for Canopy. Wren doesn't collect personal data unless you choose to share it through the contact form. At the end of the conversation, Wren may ask for your feedback on the experience.",
     "locale": "en"
   },
   "privacy": {

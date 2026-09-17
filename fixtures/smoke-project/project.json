@@ -9,7 +9,8 @@
     "contactForm": true,
     "endSessionTool": true,
     "knowledgeBase": false,
-    "followUpEmail": false
+    "followUpEmail": false,
+    "feedback": false
   },
   "sessionMaxSeconds": 900,
   "capabilities": {

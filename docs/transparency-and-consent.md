@@ -12,6 +12,7 @@ A project built with this toolkit ships with these defaults, on unless you chang
 - **Session-only transcripts.** `privacy.transcriptRetention` defaults to `"none"`.
 - **Live captions, keyboard operation, a pause control, a visible mute.** WCAG 2.2 AA is the target.
 - **No contact collection and no follow-up email.** `features.followUpEmail` defaults to off. Turning it on means the platform extracts the visitor's name, email, company, role, and phone from the conversation and emails a summary. That's a new purpose your privacy panel needs to name explicitly if you turn it on.
+- **No feedback capture.** `features.feedback` defaults to off. Turning it on means the platform extracts a `SESSIONFEEDBACK` insight (what stood out, what could be better, whether they'd recommend it) from the full transcript after the session ends, and emails it to configured recipients. Independent of `followUpEmail`: a project can capture feedback without collecting contact details, or the other way around. That's a new purpose your privacy panel needs to name explicitly if you turn it on.
 
 ## 2. What you still have to decide
 

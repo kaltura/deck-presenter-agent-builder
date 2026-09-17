@@ -12,7 +12,7 @@ One command, nine steps, fixed order: navigation tool → optional contact/end-s
 
 ## Later change: which update command owns which field
 
-Once a project is provisioned, a narrower change goes through the matching update command instead of a full re-provision. All six share a read-compare-write-verify shape, all take `--dry-run`, and all exit non-zero if the post-write read-back disagrees with what was intended:
+Once a project is provisioned, a narrower change goes through the matching update command instead of a full re-provision. All seven share a read-compare-write-verify shape, all take `--dry-run`, and all exit non-zero if the post-write read-back disagrees with what was intended:
 
 | Command | Owns |
 |---|---|
@@ -22,6 +22,7 @@ Once a project is provisioned, a narrower change goes through the matching updat
 | `scripts/update-agent.mjs` | Display name, admin tags, max conversation length |
 | `scripts/attach-tool.mjs` | Any client tool (navigation, contact, end-session): creates one with no recorded id, updates config-only for one that already has an id |
 | `scripts/update-followup.mjs` | Session-lifecycle rules and the follow-up email template, only relevant when `features.followUpEmail` is on |
+| `scripts/update-feedback.mjs` | Session-lifecycle rules and the feedback email template, only relevant when `features.feedback` is on |
 
 **Gap to flag, not silently work around:** `update-avatar.mjs` only syncs the opening phrase today. `project.json` has no field yet for voice, visual, or motion-control overrides, so a request to change the avatar's voice or visual needs a manual call outside this pipeline, or a `project.json` schema extension plus an `update-avatar.mjs` change — note it in `docs/build-log.md` rather than inventing an ad hoc field.
 
