@@ -77,6 +77,7 @@ async function main() {
   const planLines = [
     `Scaffold a new project at ${targetDir} (slug "${slug}"):`,
     '  copy templates/project/* as the project skeleton',
+    '  copy .env.example from this toolkit\'s own root',
     '  copy templates/prompts/* into prompts/',
     '  copy client/ (the presenter app) into client/',
     '  copy engine/ into scripts/, plus doctor.mjs at the project root',
@@ -88,16 +89,18 @@ async function main() {
 
   mkdirSync(targetDir, { recursive: true });
 
-  // ── Project skeleton (CLAUDE.md, .env.example, .gitignore, consent/, data/, docs/, client/prompt-format.js, content.mjs, project.json) ──
+  // ── Project skeleton (CLAUDE.md, .gitignore, consent/, data/, docs/, content.mjs, project.json) ──
   cpSync(resolve(TOOLKIT_ROOT, 'templates/project'), targetDir, { recursive: true });
+
+  // ── The env-var contract for engine/ (now scripts/), copied from this toolkit's own
+  // .env.example instead of a second hand-maintained copy under templates/project/, so
+  // the two can never drift out of sync with each other or with what engine/ reads. ──
+  cpSync(resolve(TOOLKIT_ROOT, '.env.example'), resolve(targetDir, '.env.example'));
 
   // ── Prompt skeletons: {{PLACEHOLDER}} starting point for the skill's drafting stage ──
   cpSync(resolve(TOOLKIT_ROOT, 'templates/prompts'), resolve(targetDir, 'prompts'), { recursive: true });
 
-  // ── The generic presenter app. templates/project/client/prompt-format.js is a vendored
-  // duplicate for content.mjs to import at scaffold time; this copy replaces it with the
-  // full app (app.js, index.html, styles.css, assets/), so prompt-format.js must stay
-  // byte-identical between the two sources or this copy silently forks it. ──
+  // ── The generic presenter app (app.js, index.html, styles.css, assets/, prompt-format.js). ──
   cpSync(resolve(TOOLKIT_ROOT, 'client'), resolve(targetDir, 'client'), { recursive: true });
 
   // ── The engine, parameterized entirely by this project's own project.json + .env ──
