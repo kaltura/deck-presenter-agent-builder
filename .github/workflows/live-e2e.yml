@@ -1,16 +1,12 @@
 name: Live E2E
 
 # Runs real, billable Kaltura calls against the demo project's live account,
-# so it needs real secrets. On a public repo, GitHub already withholds every
-# secret from a pull_request run whose head repo is a fork; there is no
-# setting on either side that changes that. So this runs automatically on
-# every push to main and every same-repo pull request (the job-level `if`
-# below), and is skipped, not failed, on a fork PR, which gets the secretless
-# checks in ci.yml instead. workflow_dispatch stays for manual reruns.
+# so it needs real secrets and a human in the loop. workflow_dispatch only,
+# restricted to users with write access: never on push, never on pull_request
+# (a fork PR would get no secrets anyway, but a same-repo PR would, and this
+# suite must not run unattended). Plain push/pull_request gets the secretless
+# checks in ci.yml instead.
 on:
-  pull_request: {}
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 permissions:
@@ -20,7 +16,6 @@ jobs:
   e2e:
     name: Browser E2E against the live demo widget
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -32,6 +27,20 @@ jobs:
 
       - run: npx playwright install --with-deps chromium firefox
 
+      # demo/.provisioning-state.json is gitignored (it holds live resource
+      # ids), so a fresh checkout never has it. Without this cache, every run
+      # after the first looks like a clean slate to provision.mjs even though
+      # the live account already has last run's resources, and it fails with
+      # "already exists ... and is not recorded in this project's own state."
+      # The cache key has no varying part: restore whatever the last run
+      # saved, always save the latest state back, so runs stay idempotent.
+      - name: Restore demo provisioning state
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: demo/.provisioning-state.json
+          key: demo-provisioning-state
+          restore-keys: demo-provisioning-state
+
       # Idempotent: makes no live call if demo's provisioning state already
       # matches project.json. Needed so a first-ever run on a clean checkout
       # can still provision the demo project from nothing.
@@ -40,6 +49,13 @@ jobs:
         env:
           KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
           KALTURA_ADMIN_SECRET: ${{ secrets.KALTURA_ADMIN_SECRET }}
+
+      - name: Save demo provisioning state
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: demo/.provisioning-state.json
+          key: demo-provisioning-state-${{ github.run_id }}
 
       # dist.html is gitignored, so CI must rebuild it before serving it.
       - name: Bundle the demo client
