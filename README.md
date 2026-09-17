@@ -11,8 +11,8 @@ Needs: Node 22+, [Claude Code](https://claude.com/claude-code), a Kaltura partne
 **1. Scaffold a project and set credentials:**
 
 ```sh
-npx --yes --ignore-existing github:kaltura/deck-presenter-agent-builder create my-deck
-cd my-deck
+npx --yes --prefer-online github:kaltura/deck-presenter-agent-builder create my-agentic-deck
+cd my-agentic-deck
 cp .env.example .env
 ```
 
