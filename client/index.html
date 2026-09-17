@@ -166,21 +166,19 @@
       </div>
 
       <div class="controls-bar">
-        <button id="btn-toc-toggle" class="btn btn-icon" type="button" aria-label="Open table of contents">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-        </button>
+        <div class="controls-pill">
+          <button id="btn-toc-toggle" class="btn btn-icon" type="button" aria-label="Open table of contents">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
 
-        <div class="controls-nav">
           <button id="btn-prev" class="btn btn-icon" type="button" aria-label="Previous slide">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
           </button>
 
           <div class="slide-progress">
-            <div id="progress-bar" class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
-            <label class="slide-jump-label" for="slide-jump-input">
-              <input id="slide-jump-input" class="slide-jump-input" type="number" min="1" value="1" aria-label="Jump to slide number">
-              <span id="slide-counter" class="slide-counter">/ 1</span>
-            </label>
+            <input id="slide-seek" class="slide-seek" type="range" min="1" max="1" step="1" value="1" aria-label="Seek to slide">
+            <button id="slide-label" class="slide-label" type="button" title="Click to jump to a specific slide number">1 / 1</button>
+            <input id="slide-jump-input" class="slide-jump-input hidden" type="number" min="1" value="1" aria-label="Jump to slide number">
           </div>
 
           <div class="btn-nav-wrap">
@@ -188,9 +186,7 @@
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
             </button>
           </div>
-        </div>
 
-        <div class="controls-actions">
           <div id="autoplay-control" class="autoplay-control">
             <button id="btn-autoplay-toggle" class="btn btn-icon" type="button" aria-label="Toggle autoplay">
               <svg id="autoplay-ring" class="autoplay-ring" viewBox="0 0 56 56" width="28" height="28">
@@ -256,6 +252,7 @@
       <div class="contact-modal-content">
         <h3 id="contact-modal-title">Let's continue the conversation</h3>
         <p class="contact-modal-subtitle">Leave your details and our team will follow up.</p>
+        <p class="contact-modal-note">The presenter and your microphone pause while this form is open. Both resume when you submit or skip it.</p>
         <form id="contact-form">
           <label for="contact-name">Name</label>
           <input id="contact-name" class="contact-input" type="text" required autocomplete="name">

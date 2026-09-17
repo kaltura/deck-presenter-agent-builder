@@ -11,7 +11,7 @@ import { levelAt, statsSummary } from './mic-stats.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.17';
+const VERSION = '0.1.18';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
@@ -176,10 +176,9 @@ const el = {
 
   btnPrev: document.getElementById('btn-prev'),
   btnNext: document.getElementById('btn-next'),
-  progressBar: document.getElementById('progress-bar'),
-  progressFill: document.getElementById('progress-fill'),
+  slideSeek: document.getElementById('slide-seek'),
+  slideLabel: document.getElementById('slide-label'),
   slideJumpInput: document.getElementById('slide-jump-input'),
-  slideCounter: document.getElementById('slide-counter'),
 
   autoplayControl: document.getElementById('autoplay-control'),
   btnAutoplayToggle: document.getElementById('btn-autoplay-toggle'),
@@ -413,7 +412,15 @@ function resendTyped(reason) {
 }
 function resendIfStalled(count) {
   if (count !== 1) return;
-  resendTyped('brain stalled');
+  // A typed question awaiting its echo gets its own text resent, so the
+  // resume cue below never overrides what the viewer actually asked. Any
+  // other stall (mid-narration, no pending typed question) still needs the
+  // documented recovery (implementation-appendix.md's health-events table):
+  // nudge the current slide by name, or the avatar sits silently frozen.
+  if (awaitingTyped) { resendTyped('brain stalled'); return; }
+  if (!session || sessionEnded || contactModalOpen) return;
+  addDebugEntry(`resend (brain stalled): resume cue for slide ${currentSlideNum}`);
+  speakInterrupting(`${RESUME_CUE_PREFIX} You stalled mid-response. In one short sentence, resume where you left off on slide ${currentSlideNum}. Do not navigate to a different slide.`);
 }
 function sendTyped(text) {
   if (!session || sessionEnded) return;
@@ -569,9 +576,10 @@ function showToast(message, kind = 'info') {
 // ── Slide UI ──
 function updateSlideUI(n) {
   currentSlideNum = n;
-  el.slideCounter.textContent = `/ ${totalSlides()}`;
+  el.slideLabel.textContent = `${n} / ${totalSlides()}`;
   el.slideJumpInput.value = String(n);
-  el.progressFill.style.width = `${(n / totalSlides()) * 100}%`;
+  el.slideSeek.value = String(n);
+  el.slideSeek.style.setProperty('--progress', `${(n / totalSlides()) * 100}%`);
   el.slideBadge.textContent = `Slide ${n} of ${totalSlides()}`;
   el.slideBadge.classList.remove('flash');
   requestAnimationFrame(() => el.slideBadge.classList.add('flash'));
@@ -598,6 +606,7 @@ async function loadPDF() {
     const loadingTask = window.pdfjsLib.getDocument(url);
     pdfDoc = await loadingTask.promise;
     el.slideJumpInput.max = String(totalSlides());
+    el.slideSeek.max = String(totalSlides());
     await renderPage(currentSlideNum);
   } catch (err) {
     addDebugEntry(`PDF load failed: ${err.message}`);
@@ -1143,7 +1152,14 @@ function registerSessionEvents(sess) {
   sess.on('responsePending', () => {});
   sess.on('responseSettled', () => { scheduleAutoPlay(); });
 
-  sess.on('reconnecting', () => showToast('Reconnecting…', 'warn'));
+  sess.on('reconnecting', () => {
+    showToast('Reconnecting…', 'warn');
+    // A cold reconnect re-runs the SDK's StV connect internally and fires a
+    // fresh 'mediaReady', which is what actually hides this again. Without
+    // re-showing it here first, the video element can render a stale or
+    // not-yet-synced frame (an "odd face") in the gap before that event.
+    el.avatarLoading.classList.remove('hidden');
+  });
   sess.on('reconnected', () => showToast('Reconnected.', 'info'));
   // No dedicated E2E test: forcing a live backend stall on demand isn't
   // possible from the client. resendIfStalled/resendTyped share their guards
@@ -1189,10 +1205,26 @@ function bindEvents() {
 
   el.btnPrev.addEventListener('click', () => { markUserInteraction(); goToSlide(currentSlideNum - 1, 'user'); });
   el.btnNext.addEventListener('click', () => { markUserInteraction(); goToSlide(currentSlideNum + 1, 'user'); });
+  el.slideSeek.addEventListener('change', () => {
+    const n = Number(el.slideSeek.value);
+    if (Number.isInteger(n)) { markUserInteraction(); goToSlide(n, 'jump'); }
+  });
+  el.slideLabel.addEventListener('click', () => {
+    el.slideLabel.classList.add('hidden');
+    el.slideJumpInput.classList.remove('hidden');
+    el.slideJumpInput.focus();
+    el.slideJumpInput.select();
+  });
+  function revealSlideLabel() {
+    el.slideJumpInput.classList.add('hidden');
+    el.slideLabel.classList.remove('hidden');
+  }
   el.slideJumpInput.addEventListener('change', () => {
     const n = Number(el.slideJumpInput.value);
     if (Number.isInteger(n)) { markUserInteraction(); goToSlide(n, 'jump'); }
   });
+  el.slideJumpInput.addEventListener('blur', revealSlideLabel);
+  el.slideJumpInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') revealSlideLabel(); });
 
   el.btnAutoplayToggle.addEventListener('click', () => setAutoPlayUI(!autoPlayEnabled));
 
