@@ -26,12 +26,31 @@ function slugify(name) {
   );
 }
 
+// Resolve the exact toolkit commit this scaffold came from, for check-template-update.mjs
+// (ARCHITECTURE.md 12). A local clone has a .git dir, so git rev-parse works directly.
+// `npx github:...` extracts a tarball with no .git, so fall back to the commit SHA npm
+// itself already resolved and recorded in the npx cache's own package-lock.json.
 function templateVersion() {
   try {
-    return execFileSync('git', ['-C', TOOLKIT_ROOT, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    return execFileSync('git', ['-C', TOOLKIT_ROOT, 'rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
   } catch {
-    return 'unknown';
+    // no-op: fall through to the npx-lockfile lookup below
   }
+
+  try {
+    const lockPath = resolve(TOOLKIT_ROOT, '..', '..', 'package-lock.json');
+    const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+    const resolved = lock.packages?.['node_modules/deck-presenter-agent-builder']?.resolved;
+    const sha = resolved?.match(/#([0-9a-f]{40})$/)?.[1];
+    if (sha) return sha;
+  } catch {
+    // no-op: neither source is available
+  }
+
+  return 'unknown';
 }
 
 async function main() {
