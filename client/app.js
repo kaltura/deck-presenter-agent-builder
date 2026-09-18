@@ -846,10 +846,7 @@ function togglePause() {
   } else {
     session.resume?.();
     presenter?.refreshContext();
-    // resume() commits the rebuilt session to its own scripted opening line
-    // before session.speaking flips true — speakInterrupting()'s immediate-send
-    // guard would race that line. speakNow() holds until it's done instead.
-    session.speakNow?.(`${RESUME_CUE_PREFIX} The viewer has resumed — briefly continue where you left off.`);
+    speakInterrupting(`${RESUME_CUE_PREFIX} The viewer has resumed — briefly continue where you left off.`);
     scheduleAutoPlay();
   }
 }
