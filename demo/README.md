@@ -16,7 +16,6 @@ against and to show what a finished project looks like end to end.
 - `prompts/`: every prompt surface, filled in with Canopy's content.
 - `client/prompt-format.js` is vendored unchanged from the toolkit's `client/`.
   `content.mjs` is vendored unchanged from `templates/project/`.
-- `docs/build-log.md`: what was invented and why.
 
 ## Using it
 

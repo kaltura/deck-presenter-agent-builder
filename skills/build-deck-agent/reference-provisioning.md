@@ -26,7 +26,7 @@ Once a project is provisioned, a narrower change goes through the matching updat
 | `scripts/update-followup.mjs` | Session-lifecycle rules and the follow-up email template, only relevant when `features.followUpEmail` is on |
 | `scripts/update-feedback.mjs` | Session-lifecycle rules and the feedback email template, only relevant when `features.feedback` is on |
 
-**Gap to flag, not silently work around:** `project.json` has no field for motion-control overrides. A request to change motion control needs a manual call outside this pipeline, or a `project.json` schema extension plus an `update-avatar.mjs` change. Note it in `docs/build-log.md` rather than inventing an ad hoc field.
+**Gap to flag, not silently work around:** `project.json` has no field for motion-control overrides. A request to change motion control needs a manual call outside this pipeline, or a `project.json` schema extension plus an `update-avatar.mjs` change. Note it in the report stage's release notes rather than inventing an ad hoc field.
 
 ## Capabilities are written in full, always
 
@@ -42,7 +42,7 @@ The persona's name appears in the base directive, the prompt blocks, and the ope
 
 ## Credential handling
 
-`adminSecret` comes from this project's own `.env` and is exchanged once for a short-lived session key at the start of each command (`scripts/lib/kaltura.mjs`). Never log `adminSecret` or paste it into a report, a commit message, or `docs/build-log.md`. If a command's error output ever appears to include it, redact it before showing the human and flag it as a bug in the engine's error handling.
+`adminSecret` comes from this project's own `.env` and is exchanged once for a short-lived session key at the start of each command (`scripts/lib/kaltura.mjs`). Never log `adminSecret` or paste it into a report, a commit message, or release notes. If a command's error output ever appears to include it, redact it before showing the human and flag it as a bug in the engine's error handling.
 
 ## Same-account collision
 

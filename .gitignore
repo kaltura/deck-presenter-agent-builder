@@ -23,6 +23,11 @@ data/kb/
 !demo/**/data/slides/
 !demo/**/data/kb/
 
+# demo/ is a worked example, not a real project: its eval runs exist to prove
+# the harness works, not to track a regression trend, so they stay generated
+# and ungitted (unlike a real project's docs/eval-runs/, which is tracked).
+demo/docs/eval-runs/
+
 # Per-project runtime state
 .provisioning-state.json
 .deploy-result.json
