@@ -142,6 +142,14 @@ export function routedToSlide(toolCalls, navToolName, expectedSlide) {
   return (toolCalls || []).some((tc) => tc.name === navToolName && Number(tc.args?.slide_num) === Number(expectedSlide));
 }
 
+/**
+ * The check-8 question. It asks the agent to name the term but leaves the written form
+ * to the pronunciation guide, since check 8 fails a reply that writes the display term.
+ */
+export function pronunciationProbe(term) {
+  return `Tell me about ${term}, and say its name in your answer.`;
+}
+
 /** Mirrors client/app.js's toReadableText/buildCaptionRules: spoken form -> display term, word-boundary-aware, longest match first. */
 export function applyCaptionMap(text, captionMap) {
   if (!text) return text;
@@ -505,7 +513,7 @@ async function main() {
       // expanded number word form); probe each display term once, not once per alias.
       for (const term of new Set(Object.values(captionMap))) {
         progress(flags, `[8] pronunciation: "${term}"`);
-        const r = await callWithRetry(() => askAgent(`Tell me about ${term}. Use the term "${term}" in your answer.`));
+        const r = await callWithRetry(() => askAgent(pronunciationProbe(term)));
         const raw = r?.text || '';
         const captioned = applyCaptionMap(raw, captionMap);
         const aliases = Object.entries(captionMap).filter(([, t]) => t === term).map(([spoken]) => spoken.toLowerCase());

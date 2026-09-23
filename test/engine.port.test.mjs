@@ -12,6 +12,7 @@ import {
   hasUnspokenCurrencySuffix,
   buildDeckWideNumberPool,
   numericTraceabilityCheck,
+  pronunciationProbe,
 } from '../engine/eval.mjs';
 
 // ── attach-tool.mjs: normalizeToolConfig / stableStringify / eqToolConfig ──
@@ -213,4 +214,10 @@ test('normalizeServiceUrl adds /api_v3 to a bare host and keeps a URL that has a
   assert.equal(normalizeServiceUrl('https://cdnapisec.kaltura.com/'), 'https://cdnapisec.kaltura.com/api_v3');
   assert.equal(normalizeServiceUrl('https://cdnapisec.kaltura.com/api_v3/'), 'https://cdnapisec.kaltura.com/api_v3');
   assert.equal(normalizeServiceUrl('https://ovp.example.test/custom/api_v3'), 'https://ovp.example.test/custom/api_v3');
+});
+
+test('the pronunciation probe names the term without asking for its printed form', () => {
+  const q = pronunciationProbe('Lumen');
+  assert.match(q, /Lumen/);
+  assert.doesNotMatch(q, /"Lumen"|use the term/i);
 });

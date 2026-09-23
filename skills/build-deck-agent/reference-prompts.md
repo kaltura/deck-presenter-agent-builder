@@ -65,6 +65,7 @@ Shape validity is already guaranteed by schema-enforced generation, so this lint
 
 - Every slide-number reference anywhere in `prompts/` or `data/routes.json` exists in `data/slides/`.
 - Every such reference falls inside the chapter range it claims to belong to.
+- Every `goToSlide` in `data/nav-rules.json` is cited in the deck-specific section of `base-directive.md`.
 - A reference presented as a proof-point citation points at a slide whose `content.key_metrics` is non-empty.
 - Every KB file's `sourceSlides` frontmatter resolves to real slides inside its stated `chapter`.
 - Every negative directive rule ("never do X") is paired with a stated positive alternative ("say Y instead"). A rule sentence that only forbids, with nothing stated to do instead, fails.

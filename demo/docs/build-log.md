@@ -46,5 +46,23 @@ top of the standing AI disclosure every deployed agent shows.
 
 ## Live agent
 
-Not deployed. This project is committed as a static example; it has not been
-run through `provision`/`deploy` against a live Kaltura account.
+Provisioned and deployed on a Kaltura account the maintainers run. The Live E2E
+workflow and `engine/eval.mjs --project demo` run against it. The live ids stay
+in the gitignored `.provisioning-state.json`.
+
+## 2026-09-23, eval fixes for slide 2 routing and pronunciation (v0.1.21)
+
+| Issue | Cause | Fix |
+|---|---|---|
+| Check 6: "Why is watering on a calendar a problem?" went to slide 4 instead of slide 2 | Slide 2 had no nav rule, so the closest rule (how it works) won | New first rule for slide 2 in `data/nav-rules.json` |
+| Check 8: every pronunciation term failed | The probe asked the agent to write the display term, which check 8 counts as a failure | The probe asks the agent to say the name and leaves the written form to the guide (`pronunciationProbe` in `engine/eval.mjs`) |
+| Check 8: after that fix, the reply still wrote "Fernvale Orchards" | The two-word name appears in the glossary, restricted topics, and slide 8, and the model copied it | A direct rule for the full name after the table in `prompts/pronunciation-guide.md` |
+| Slide 2's nav rule was in `data/nav-rules.json` but not in the directive | The deck-specific section was not re-rendered | Re-rendered the section. `bin/lint-prompts.mjs` now fails when a nav rule's slide is missing from it |
+
+Checked:
+- `npm run scan && npm test` pass
+- `npm run lint-prompts` clean
+- `docs/eval-runs/`: 7/9 before, 8/9 after the first two fixes, 9/9 after all of them
+
+Not yet deployed:
+- none
