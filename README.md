@@ -4,6 +4,8 @@ Turn a deck into a live AI presenter agent. Drop in a PDF and speaker notes, ans
 
 Built on Kaltura's agent platform. Needs a Kaltura account, not API knowledge.
 
+Want to see a finished example before you start? `demo/` is a full worked project (a fictional deck, prompts, and knowledge base) checked into this repo end to end.
+
 ## Quickstart
 
 Needs: Node 22+, [Claude Code](https://claude.com/claude-code), a Kaltura partner id and admin secret (KMC → Settings → Integration Settings), git access to this repo.
@@ -43,7 +45,7 @@ What happens next:
 
 One confirmation gate, by design: your account, your content, your call, before anything is created or billed.
 
-## Design in one paragraph
+## Design, in brief
 
 - **Template, not a workspace.** This repo holds the engine, a generic presenter web app, prompt templates, and the Claude Code skill that drives the build.
 - Your deck lives only in the project directory `create` scaffolds for you, never in this repo.
@@ -56,7 +58,7 @@ One confirmation gate, by design: your account, your content, your call, before 
 - Live captions, keyboard operation, a pause control, a visible mute. Target: WCAG 2.2 AA.
 - Cloning a real voice or face needs a signed consent record in your project repo first.
 
-Safe defaults, not a compliance guarantee. Every one but the `.env` leak scan can be overridden. See `docs/transparency-and-consent.md` for what you still own if you do.
+Safe defaults, not a compliance guarantee. The AI disclosure line and the no-audience-capture rule can't be turned off; the synthetic-content label can be suppressed once you've acknowledged it; everything else in `project.json` is yours to set. See `docs/transparency-and-consent.md` for what you still own.
 
 ## Common next steps
 
@@ -67,6 +69,8 @@ Safe defaults, not a compliance guarantee. Every one but the `.env` leak scan ca
 | Want a knowledge base from reference docs, not just the deck | set `project.json`'s `features.knowledgeBase` to `true`, drop docs in `input/`, run `/build-deck-agent kb` |
 | Provisioning died partway through | `/build-deck-agent provision`, resumes from `.provisioning-state.json` |
 | Toolkit updated since you scaffolded | clone this repo, run `node deck-presenter-agent-builder/bin/check-template-update.mjs --project /path/to/your-project`, lists what changed upstream in `engine/`/`client/`; port each change into your project's `scripts/`/`client/` by hand |
+| Something failed and you don't know why | `node doctor.mjs --project .` in your project: a read-only preflight that checks the Node version, `.env`, and one authenticated call, before you dig further |
+| Done with a project, want it off the account | `node scripts/teardown.mjs --project .` in your project: deletes only the Kaltura resources this project created |
 
 Every stage is idempotent: rerunning one with nothing actually changed makes no live call.
 
@@ -84,6 +88,8 @@ Node 22+, Claude Code, a Kaltura account with a partner id and admin secret.
 | `client/README.md` | The presenter web app: architecture, theming, extension points, running the E2E suite. |
 | `CLAUDE.md` | Rules for contributing to this repo. |
 | `SECURITY.md` | How to report a vulnerability. |
+
+Questions or found a bug? Open a [GitHub issue](https://github.com/kaltura/deck-presenter-agent-builder/issues).
 
 ## License
 
