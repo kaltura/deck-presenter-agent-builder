@@ -8,7 +8,7 @@ import { isWithinCooldown } from './nav-cooldown.js';
 import { levelAt, statsSummary } from './mic-stats.js';
 import { navAckPayload } from './nav-ack.js';
 import { peekResumeSlide } from './presenter-memory.js';
-import { autoPlayBlocked, STAY_HERE_PHRASE_RE } from './autoplay-state.js';
+import { autoPlayBlocked, autoPlayBlockers, STAY_HERE_PHRASE_RE } from './autoplay-state.js';
 
 // ── Config (bundle.mjs rewrites these four before esbuild runs) ──
 const PARTNER_ID = 0;
@@ -876,7 +876,11 @@ function cancelAutoPlay() {
 }
 function scheduleAutoPlay(delay = AUTO_PLAY_DELAY_MS) {
   cancelAutoPlay();
-  if (autoPlayBlocked(autoPlaySnapshot())) return;
+  const blockers = autoPlayBlockers(autoPlaySnapshot());
+  if (blockers.length) {
+    addDebugEntry(`autoplay held: ${blockers.join(', ')}`);
+    return;
+  }
   const wait = visitorInQnA || lastAvatarTextEndedWithQuestion ? AUTO_PLAY_AFTER_QUESTION_MS : delay;
   showCountdown(wait);
   autoPlayTimer = setTimeout(() => {

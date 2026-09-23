@@ -19,24 +19,21 @@
  * @param {boolean} state.avatarSpeaking the avatar is currently talking (local flag)
  * @param {boolean} state.sessionSpeaking the session reports the avatar as speaking
  * @param {boolean} state.responsePending the session is generating a response
- * @returns {boolean} true when autoplay must not run right now
+ * @returns {string[]} the names of the gates that block autoplay right now, empty when it may run
  */
-export function autoPlayBlocked(state) {
+export function autoPlayBlockers(state) {
   const s = state || {};
-  return !s.sessionRevealed
-    || !s.openingDone
-    || !s.deckPresenting
-    || !s.autoPlayEnabled
-    || !!s.heldAfterBack
-    || !!s.isPaused
-    || !!s.sessionEnded
-    || !!s.deckPausedAfterGoodbye
-    || !!s.visitorSpeaking
-    || !!s.replyPending
-    || !!s.typing
-    || !!s.avatarSpeaking
-    || !!s.sessionSpeaking
-    || !!s.responsePending;
+  const mustBeTrue = ['sessionRevealed', 'openingDone', 'deckPresenting', 'autoPlayEnabled'];
+  const mustBeFalse = ['heldAfterBack', 'isPaused', 'sessionEnded', 'deckPausedAfterGoodbye', 'visitorSpeaking', 'replyPending', 'typing', 'avatarSpeaking', 'sessionSpeaking', 'responsePending'];
+  return [
+    ...mustBeTrue.filter((k) => !s[k]).map((k) => `!${k}`),
+    ...mustBeFalse.filter((k) => s[k]),
+  ];
+}
+
+/** @returns {boolean} true when autoplay must not run right now */
+export function autoPlayBlocked(state) {
+  return autoPlayBlockers(state).length > 0;
 }
 
 // A visitor who asks to stay on the current slide shouldn't have to repeat it
