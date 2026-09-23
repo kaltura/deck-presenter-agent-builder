@@ -1,5 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { startSession, waitForLiveSession, sendChat } from './helpers.mjs';
+import { test, expect, startSession, waitForLiveSession, sendChat } from './helpers.mjs';
 
 test.describe('keyboard shortcuts', () => {
   test('Home, End, T, and Escape control the deck', async ({ page }) => {

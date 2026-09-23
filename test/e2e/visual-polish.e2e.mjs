@@ -1,5 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { startSession, waitForLiveSession } from './helpers.mjs';
+import { test, expect, startSession, waitForLiveSession } from './helpers.mjs';
 
 test('print media hides chrome and the PDF badge glows once on load', async ({ page }) => {
   await startSession(page);

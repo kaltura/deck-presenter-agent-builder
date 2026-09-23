@@ -1,5 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { startSession, waitForLiveSession, sendChat } from './helpers.mjs';
+import { test, expect, startSession, waitForLiveSession, sendChat } from './helpers.mjs';
 
 test('opening the transcript shows mic stats and logs a turn, download and close both work', async ({ page }) => {
   await startSession(page);

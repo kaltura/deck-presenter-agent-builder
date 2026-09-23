@@ -1,5 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { startSession, waitForLiveSession } from './helpers.mjs';
+import { test, expect, startSession, waitForLiveSession } from './helpers.mjs';
 import { buildAnnotationsPdf } from './fixtures/annotations-pdf.mjs';
 
 const FIXTURE_PATH = '/test-annotations.pdf';

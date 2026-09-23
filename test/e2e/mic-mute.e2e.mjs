@@ -1,5 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { startSession, waitForLiveSession } from './helpers.mjs';
+import { test, expect, startSession, waitForLiveSession } from './helpers.mjs';
 
 test('clicking the mic-mute button mutes and unmutes the viewer mic', async ({ page }) => {
   await startSession(page);

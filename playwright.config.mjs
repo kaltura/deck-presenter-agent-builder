@@ -8,6 +8,11 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * No webkit project: Playwright has no fake-media mechanism for WebKit (no
  * `webkitUserPrefs` or equivalent), an upstream limitation, not a gap here.
+ *
+ * package.json pins @playwright/test to 1.62.1 (Firefox 153). The Firefox 155
+ * in 1.63.0 never starts ICE gathering: both peer connections go straight to
+ * `failed`, so no media arrives. Before you upgrade, check that the Firefox
+ * tests still pass in live-e2e.yml.
  */
 export default defineConfig({
   testDir: './test/e2e',
@@ -35,6 +40,11 @@ export default defineConfig({
           firefoxUserPrefs: {
             'media.navigator.streams.fake': true,
             'media.navigator.permission.disabled': true,
+            // Download the OpenH264 plugin. test/e2e/helpers.mjs waits for it.
+            'media.gmp-manager.updateEnabled': true,
+            'media.gmp-provider.enabled': true,
+            'media.gmp-gmpopenh264.enabled': true,
+            'media.gmp-gmpopenh264.autoupdate': true,
           },
         },
       },
