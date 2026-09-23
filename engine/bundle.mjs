@@ -11,15 +11,15 @@
  *
  * Usage: node engine/bundle.mjs --project <path> [--pdf-url=<url>]
  *        [--widget-id=<id>] [--partner-id=<id>] [--json]
- * Without --pdf-url, the bundled PDF_URL stays the local-dev relative path —
- * fine for a preview bundle, wrong for deployment (deploy.mjs always passes it).
+ * Without --pdf-url, the bundled PDF_URL stays the local-dev relative path.
+ * Fine for a preview bundle, wrong for deployment (deploy.mjs always passes it).
  * Without --widget-id/--partner-id, falls back to the project's own
  * .provisioning-state.json / .env so a plain `bundle` after `provision`
  * needs no flags at all.
  */
 import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync, renameSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import esbuild from 'esbuild';
 import { parseFlags, projectRootFrom, progress, result, fail, EXIT, runMain } from './lib/cli.mjs';
 import { parseSections } from '../client/prompt-format.js';
@@ -45,6 +45,23 @@ const ENV_LEAK_SCAN_EXCLUDE_KEYS = ['KALTURA_WIDGET_ID', 'KALTURA_PARTNER_ID', '
 // is a real future option but touches prompt generation (content.mjs,
 // update-avatar.mjs), so it's deferred rather than implemented here.
 const SYNTHETIC_LABEL_PLACEMENT_VALUES = ['welcome'];
+
+/** Inlines every `./assets/<file>.svg` tag that `html` actually contains, as a base64 data
+ * URI, for every svg file `assetsDir` holds. `client/` may ship an svg asset that the current
+ * markup doesn't reference yet (a future toggle's icon, for example); skip those rather than
+ * inlining bytes nothing links to. Exported so a unit test can prove this generically, without
+ * depending on which svg tags the shipped index.html happens to have today. */
+export function inlineSvgAssets(html, assetsDir) {
+  if (!existsSync(assetsDir)) return html;
+  for (const file of readdirSync(assetsDir).filter((f) => f.endsWith('.svg'))) {
+    const tag = `./assets/${file}`;
+    if (!html.includes(tag)) continue;
+    const svg = readFileSync(resolve(assetsDir, file), 'utf8').trim();
+    const dataUri = `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+    html = html.replaceAll(tag, dataUri);
+  }
+  return html;
+}
 
 function readJson(path) {
   try {
@@ -205,7 +222,7 @@ export async function bundle(projectRoot, { pdfUrl, widgetId, partnerId } = {}) 
   const routes = existsSync(routesPath) ? readJson(routesPath) : [];
   const topicRoutes = routes.map((r) => {
     if (typeof r.entrySlide !== 'number' || r.entrySlide < 1 || r.entrySlide > total) {
-      throw new Error(`data/routes.json topic "${r.topic}" has entrySlide ${JSON.stringify(r.entrySlide)}, which is not a real slide. Re-render with bin/render-routes.mjs.`);
+      throw new Error(`data/routes.json topic "${r.topic}" has entrySlide ${JSON.stringify(r.entrySlide)}, which is not a real slide. Fix data/nav-rules.json and re-render data/routes.json from it.`);
     }
     return { keywords: [r.topic, ...(r.aliases || [])].map((k) => String(k).toLowerCase()), slide: r.entrySlide };
   });
@@ -223,21 +240,21 @@ export async function bundle(projectRoot, { pdfUrl, widgetId, partnerId } = {}) 
   const suppressSyntheticLabel = avatarSource === 'cloned' && acknowledgedWarnings.has('syntheticLabel');
 
   const inlineData = (
-    '\n  // ── Inlined slide data (bundled from data/slides/*.json — DO NOT EDIT dist.html) ──\n' +
+    '\n  // ── Inlined slide data (bundled from data/slides/*.json. DO NOT EDIT dist.html) ──\n' +
     `  SLIDE_DATA = ${JSON.stringify(slides)};\n` +
-    '\n  // ── Inlined client prompt templates (bundled from prompts/client/*.md — DO NOT EDIT dist.html) ──\n' +
+    '\n  // ── Inlined client prompt templates (bundled from prompts/client/*.md. DO NOT EDIT dist.html) ──\n' +
     `  NAV_PROMPTS = ${JSON.stringify(navPrompts)};\n` +
-    '\n  // ── Inlined tool names (bundled from content.mjs — DO NOT EDIT dist.html) ──\n' +
+    '\n  // ── Inlined tool names (bundled from content.mjs. DO NOT EDIT dist.html) ──\n' +
     `  TOOL_NAMES = ${JSON.stringify(toolNames)};\n` +
-    '\n  // ── Inlined caption map (bundled from prompts/pronunciation-guide.md — DO NOT EDIT dist.html) ──\n' +
+    '\n  // ── Inlined caption map (bundled from prompts/pronunciation-guide.md. DO NOT EDIT dist.html) ──\n' +
     `  CAPTION_MAP = ${JSON.stringify(captionMap)};\n` +
-    '\n  // ── Inlined branding override (bundled from project.json branding — DO NOT EDIT dist.html) ──\n' +
+    '\n  // ── Inlined branding override (bundled from project.json branding. DO NOT EDIT dist.html) ──\n' +
     `  BRANDING = Object.assign({}, BRANDING, ${JSON.stringify(branding)});\n` +
-    '\n  // ── Inlined chapters (bundled from project.json chapters — DO NOT EDIT dist.html) ──\n' +
+    '\n  // ── Inlined chapters (bundled from project.json chapters. DO NOT EDIT dist.html) ──\n' +
     `  CHAPTERS = ${JSON.stringify(chapters)};\n` +
-    '\n  // ── Inlined topic routes (bundled from data/routes.json — DO NOT EDIT dist.html) ──\n' +
+    '\n  // ── Inlined topic routes (bundled from data/routes.json. DO NOT EDIT dist.html) ──\n' +
     `  TOPIC_ROUTES = ${JSON.stringify(topicRoutes)};\n` +
-    '\n  // ── Inlined disclosure, privacy, and avatar-source label data (bundled from project.json — DO NOT EDIT dist.html) ──\n' +
+    '\n  // ── Inlined disclosure, privacy, and avatar-source label data (bundled from project.json. DO NOT EDIT dist.html) ──\n' +
     `  DISCLOSURE_TEXT = ${JSON.stringify(disclosureText)};\n` +
     `  PRIVACY = ${JSON.stringify(privacy)};\n` +
     `  AVATAR_SOURCE = ${JSON.stringify(avatarSource)};\n` +
@@ -286,13 +303,8 @@ export async function bundle(projectRoot, { pdfUrl, widgetId, partnerId } = {}) 
     unlinkSync(tmpEntry);
   }
 
-  // ── Inline logo.svg as a data URI ──
-  const logoPath = resolve(clientDir, 'assets', 'logo.svg');
-  if (existsSync(logoPath)) {
-    const logoSvg = readFileSync(logoPath, 'utf8').trim();
-    const logoDataUri = `data:image/svg+xml;base64,${Buffer.from(logoSvg, 'utf8').toString('base64')}`;
-    html = html.replaceAll('./assets/logo.svg', logoDataUri);
-  }
+  // ── Inline every client/assets/*.svg the shipped markup references ──
+  html = inlineSvgAssets(html, resolve(clientDir, 'assets'));
 
   // ── Inline CSS and JS into HTML ──
   const CSS_TAG = '<link rel="stylesheet" href="styles.css">';
@@ -308,11 +320,11 @@ export async function bundle(projectRoot, { pdfUrl, widgetId, partnerId } = {}) 
   const errors = [];
   if (html.includes(CSS_TAG)) errors.push('CSS link tag still present after replacement');
   if (html.includes(JS_TAG)) errors.push('app.js script tag still present after replacement');
-  if (html.includes('fetch(./data/slides') || html.includes("fetch('./data/slides")) errors.push('fetch() calls remain — slide data was not properly inlined');
-  if (html.includes('fetch(./prompts/client') || html.includes("fetch('./prompts/client")) errors.push('fetch() calls remain — client prompt templates were not properly inlined');
-  if (!html.includes('SLIDE_DATA')) errors.push('SLIDE_DATA not found in output — slide inlining failed');
-  if (!html.includes('NAV_PROMPTS')) errors.push('NAV_PROMPTS not found in output — prompt template inlining failed');
-  if (!html.includes('TOOL_NAMES')) errors.push('TOOL_NAMES not found in output — tool name inlining failed');
+  if (html.includes('fetch(./data/slides') || html.includes("fetch('./data/slides")) errors.push('fetch() calls remain: slide data was not properly inlined');
+  if (html.includes('fetch(./prompts/client') || html.includes("fetch('./prompts/client")) errors.push('fetch() calls remain: client prompt templates were not properly inlined');
+  if (!html.includes('SLIDE_DATA')) errors.push('SLIDE_DATA not found in output: slide inlining failed');
+  if (!html.includes('NAV_PROMPTS')) errors.push('NAV_PROMPTS not found in output: prompt template inlining failed');
+  if (!html.includes('TOOL_NAMES')) errors.push('TOOL_NAMES not found in output: tool name inlining failed');
   if (!html.includes(toolNames.nav)) errors.push('the navigation tool name was not baked into the bundled output');
   for (const cdn of ['pdf.js', 'socket.io']) {
     if (!html.includes(cdn)) errors.push(`CDN dependency "${cdn}" missing from output`);
@@ -352,7 +364,7 @@ async function main() {
       widgetId: flags['widget-id'],
       partnerId: flags['partner-id'],
     });
-    progress(flags, `Bundled ${distPath} — v${version} (${html.length.toLocaleString()} bytes, ${slideCount} slides inlined)`);
+    progress(flags, `Bundled ${distPath}, v${version} (${html.length.toLocaleString()} bytes, ${slideCount} slides inlined)`);
     result(flags, { version, distPath, bytes: html.length, slideCount });
   } catch (err) {
     fail(flags, EXIT.VALIDATION, `Bundle failed: ${err.message}`);
@@ -362,4 +374,4 @@ async function main() {
 // Guarded: deploy.mjs imports bundle() from this file. Without this guard,
 // importing this module for that export also ran this CLI's own main() with
 // the importer's argv, as an unintended side effect.
-if (import.meta.url === `file://${process.argv[1]}`) runMain(main);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) runMain(main);

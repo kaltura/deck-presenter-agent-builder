@@ -5,9 +5,8 @@
 It exists so you can run the engine before any real deck exists:
 
 ```sh
-node engine/bundle.mjs   --project fixtures/smoke-project
+node engine/bundle.mjs    --project fixtures/smoke-project
 node engine/provision.mjs --project fixtures/smoke-project --dry-run
-node engine/verify.mjs    --project fixtures/smoke-project --dry-run
 ```
 
 Three slides, numbered 1 to 3 with no gaps, so the bundler's contiguity check has something valid to pass and something easy to break on purpose.
@@ -25,4 +24,4 @@ It is not the demo. `demo/` is a fuller fictional deck for people evaluating the
 | `prompts/client/*.md` | Runtime prompt inlining, and the check that no `fetch()` survives bundling. |
 | `prompts/tools/*.md` | Tool description wiring. |
 
-Provisioning against a real account needs credentials in `.env`. Without them, `--dry-run` is as far as this fixture goes, which is enough to cover bundling, validation, and payload assembly.
+`provision.mjs --dry-run` still needs a `.env` with some value in every required field, since it checks credentials before it builds the plan, but the values never need to be real: `--dry-run` makes no network call. Provisioning for real, and `engine/verify.mjs` (which reads back live state), both need real credentials and an account this fixture has already been provisioned against.

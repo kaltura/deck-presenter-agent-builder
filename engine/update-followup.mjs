@@ -4,7 +4,7 @@
  * summaryOverridePrompt, reusable InsightSettings entities, a branded email
  * template (mgmt.emailTemplates), and the two session-lifecycle rules that
  * connect them (mgmt.lifecycle). Only runs when project.json's
- * features.followUpEmail is on — this is the one feature that captures and
+ * features.followUpEmail is on. This is the one feature that captures and
  * emails contact data, so it is off by default and never provisioned
  * implicitly by provision.mjs (ARCHITECTURE.md 10).
  *
@@ -13,7 +13,7 @@
  * in which case the stale template is left alone and a fresh one is created.
  * InsightSettings entities and lifecycle rules are looked up by key/systemName
  * and reused rather than duplicated. Both rules are dry-run verified with
- * lifecycle.match() before this command reports success — a rule that exists
+ * lifecycle.match() before this command reports success. A rule that exists
  * but does not match is the normal failure mode here, not an edge case.
  *
  * Usage: node engine/update-followup.mjs --project <path> [--dry-run] [--yes] [--json]

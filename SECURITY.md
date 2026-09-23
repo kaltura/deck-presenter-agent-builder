@@ -17,7 +17,7 @@ This toolkit runs on a developer's machine, holds Kaltura account credentials, a
 - Code execution from untrusted input: a malicious deck, speaker-notes file, or support document processed by the ingestion pipeline, or a crafted `project.json`.
 - Weaknesses in `bin/create-project.mjs`, which runs on machines with other cloud credentials present.
 - A path that bypasses the confirmation gate before a mutating or billable Kaltura call.
-- A path that removes the deployed agent's AI disclosure or synthetic-content label without editing code.
+- A path that removes the deployed agent's AI disclosure without editing code, or its synthetic-content label without the `overrides.acknowledgeWarnings` opt-out in `project.json`.
 
 Out of scope:
 

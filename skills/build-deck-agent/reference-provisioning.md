@@ -4,27 +4,29 @@ Loaded by the `provision` stage of `SKILL.md`. The concrete Kaltura call contrac
 
 ## First run: `scripts/provision.mjs`
 
-One command, nine steps, fixed order: navigation tool → optional contact/end-session tools → optional knowledge base (category, upload, record) → intellect (prompts + glossary + capabilities + tool ids + knowledge ids in one call) → corpus-readiness poll → avatar → agent → widget id.
+One command, nine steps, fixed order: navigation tool → optional contact/end-session tools → optional knowledge base (category, upload, record, corpus-readiness poll) → intellect (prompts + glossary + capabilities + tool ids + knowledge ids in one call) → avatar → agent → widget id.
 
 - Resumable: after each step succeeds, its id is written immediately to `.provisioning-state.json`. A retry after a failure resumes from the first missing step, reusing recorded ids instead of re-creating them.
 - Run once without `--yes` to see the plan (resource type, create vs. update, existing id if reusing one). Only re-run with `--yes` after confirming it.
-- `--force` re-provisions even when a widget id is already recorded. Creating a voice or visual is **not idempotent** — a forced re-run mints a new catalog item and orphans the previous one, and reports what it orphaned. Don't pass `--force` casually.
+- `--force` re-provisions even when a widget id is already recorded. Creating a voice or visual is **not idempotent**: a forced re-run mints a new catalog item and orphans the previous one, and reports what it orphaned. Don't pass `--force` casually.
 
 ## Later change: which update command owns which field
 
-Once a project is provisioned, a narrower change goes through the matching update command instead of a full re-provision. All seven share a read-compare-write-verify shape, all take `--dry-run`, and all exit non-zero if the post-write read-back disagrees with what was intended:
+Once a project is provisioned, a narrower change goes through the matching update command instead of a full re-provision. All share a read-compare-write-verify shape, all take `--dry-run`, and all exit non-zero if the post-write read-back disagrees with what was intended:
 
 | Command | Owns |
 |---|---|
-| `scripts/update-prompts.mjs` | Base directive, glossary, prompt blocks, persona name |
+| `scripts/update-prompts.mjs` | Base directive, glossary, prompt blocks, persona name, opening phrase |
 | `scripts/update-capabilities.mjs` | The 15-key capability map, `allow_client_variables` |
-| `scripts/update-avatar.mjs` | Opening phrase (voice/visual/motion have no `project.json` field yet — see the gap note below) |
+| `scripts/update-avatar.mjs` | Voice and visual (from `avatar.templateName`), voice speed (`avatar.voiceSpeed`). Also clears the legacy avatar-level opening phrase. |
 | `scripts/update-agent.mjs` | Display name, admin tags, max conversation length |
 | `scripts/attach-tool.mjs` | Any client tool (navigation, contact, end-session): creates one with no recorded id, updates config-only for one that already has an id |
+| `scripts/attach-knowledge-base.mjs` | Creates and attaches a knowledge base, only when `features.knowledgeBase` is on and the intellect does not have one yet |
+| `scripts/update-kb.mjs` | Content of already-attached KB entries, replaced in place when a local `data/kb/*.md` file changes. Refuses a local file with no recorded entry, pointing at `attach-knowledge-base.mjs` instead |
 | `scripts/update-followup.mjs` | Session-lifecycle rules and the follow-up email template, only relevant when `features.followUpEmail` is on |
 | `scripts/update-feedback.mjs` | Session-lifecycle rules and the feedback email template, only relevant when `features.feedback` is on |
 
-**Gap to flag, not silently work around:** `update-avatar.mjs` only syncs the opening phrase today. `project.json` has no field yet for voice, visual, or motion-control overrides, so a request to change the avatar's voice or visual needs a manual call outside this pipeline, or a `project.json` schema extension plus an `update-avatar.mjs` change — note it in `docs/build-log.md` rather than inventing an ad hoc field.
+**Gap to flag, not silently work around:** `project.json` has no field for motion-control overrides. A request to change motion control needs a manual call outside this pipeline, or a `project.json` schema extension plus an `update-avatar.mjs` change. Note it in `docs/build-log.md` rather than inventing an ad hoc field.
 
 ## Capabilities are written in full, always
 
@@ -36,7 +38,7 @@ The clone path and the fresh-from-sample path are both gated on a consent record
 
 ## Persona identity spans three fields
 
-The persona's name appears in the base directive, the prompt blocks, and the opening phrase. `content.mjs` derives all three from `project.json.personaName` and the provisioning/update commands assert them equal after a write. If you ever see them drift, the fix is in `prompts/persona-name.md` or `project.json`, never a one-off patch to only one of the three live fields.
+The persona's name appears in the base directive, the prompt blocks, and the opening phrase, all on the intellect. `content.mjs` derives all three from `project.json.personaName` and the provisioning/update commands assert them equal after a write. If you ever see them drift, the fix is in `prompts/persona-name.md` or `project.json`, never a one-off patch to only one of the three live fields.
 
 ## Credential handling
 
@@ -44,4 +46,4 @@ The persona's name appears in the base directive, the prompt blocks, and the ope
 
 ## Same-account collision
 
-Every named resource (KB category, tool, agent display name) is namespaced by `project.json.slug`. Before creating one, the engine also checks the live account for an existing resource with that generated name; if one exists and this project's own state file doesn't already own it, provisioning refuses with an "already exists, owned elsewhere" error instead of overwriting it. If you hit this, it means either the slug collided with another project on the same Kaltura account, or `.env` points at the wrong account — don't rename around it without checking which.
+Every named resource (KB category, tool, agent display name) is namespaced by `project.json.slug`. Before creating one, the engine also checks the live account for an existing resource with that generated name; if one exists and this project's own state file doesn't already own it, provisioning refuses with an "already exists, owned elsewhere" error instead of overwriting it. If you hit this, it means either the slug collided with another project on the same Kaltura account, or `.env` points at the wrong account. Don't rename around it without checking which.

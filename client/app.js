@@ -6,6 +6,9 @@ import { parseSections } from './prompt-format.js';
 import { normalizeTyped, typedTextsMatch } from './echo-match.js';
 import { isWithinCooldown } from './nav-cooldown.js';
 import { levelAt, statsSummary } from './mic-stats.js';
+import { navAckPayload } from './nav-ack.js';
+import { peekResumeSlide } from './presenter-memory.js';
+import { autoPlayBlocked, STAY_HERE_PHRASE_RE } from './autoplay-state.js';
 
 // ── Config (bundle.mjs rewrites these four before esbuild runs) ──
 const PARTNER_ID = 0;
@@ -17,7 +20,6 @@ const SDK_VERSION = '0.0.0';
 const AUTO_PLAY_DELAY_MS = 10000;
 const AVATAR_CONNECT_TIMEOUT_MS = 20000;
 const AUTO_PLAY_AFTER_QUESTION_MS = 15000;
-const RECENT_INTERACTION_MS = 5000;
 const NAV_NUDGE_PREFIX = '[SLIDE CHANGE]';
 const RESUME_CUE_PREFIX = '[RESUMED]';
 const CONTACT_FORM_PREFIX = '[CONTACT FORM]';
@@ -49,7 +51,7 @@ let SLIDE_DATA = [];
 let NAV_PROMPTS = { navNudges: {}, navHint: '', routeAnswers: {} };
 
 // Tool names come from this project's own content.mjs (via bundle.mjs), never
-// hardcoded here. Empty string means the project didn't enable that tool —
+// hardcoded here. Empty string means the project didn't enable that tool, so
 // the corresponding feature (contact form / end-session handling) then stays
 // inert rather than silently degrading.
 let TOOL_NAMES = { nav: '', contact: '', endSession: '' };
@@ -144,6 +146,8 @@ const el = {
   btnContinue: document.getElementById('btn-continue'),
   btnStart: document.getElementById('btn-start'),
 
+  disclaimerScroll: document.getElementById('disclaimer-scroll'),
+
   btnPrivacy: document.getElementById('btn-privacy'),
   privacyPanel: document.getElementById('privacy-panel'),
   privacyController: document.getElementById('privacy-controller'),
@@ -236,12 +240,46 @@ const MIC_GATE_DB = -50;
 const MIC_STATS_TICK_MS = 100;
 const micStats = { ctx: null, raw: null, gated: null, buf: null, timer: null, ticks: 0, hist: new Uint32Array(101), openTicks: 0, openings: 0, gateOpen: false, turns: 0, shortTurns: 0, bargeIns: 0 };
 let autoPlayEnabled = true;
+// Set by a manual move to an earlier slide, cleared by the next forward move.
+// Otherwise autoplay would send the visitor straight back to where they just
+// asked to leave, and the deck ping-pongs between the two slides.
+let autoPlayHeldAfterBack = false;
 let autoPlayTimer = null;
 let countdownTicker = null;
 let countdownEndsAt = 0;
 let countdownDurationMs = 0;
-let userInteractedRecently = false;
-let userInteractionTimer = null;
+// The disclaimer has been acknowledged and the avatar is allowed to speak and
+// to toast connection status. Set once, in startSession().
+let sessionRevealed = false;
+// An SDK 'disclosure' event that arrived before sessionRevealed, held for the reveal.
+let pendingDisclosureText = null;
+// Autoplay starts only once the scripted opening has finished (openingDone) AND
+// the deck is actually presenting: the visitor replied, or a slide changed. The
+// opening ends on a question, so its end must not start a countdown off slide 1.
+let openingDone = false;
+let deckPresenting = false;
+// A real visitor turn puts the current slide into Q&A mode: the next countdown
+// waits AUTO_PLAY_AFTER_QUESTION_MS instead of the short default.
+let visitorInQnA = false;
+// Local mic voice activity, tracked separately from the server's own speech
+// detection: a barge-in can end the avatar's turn while the visitor is still
+// mid-sentence, and the server's own signal can arrive seconds late.
+let visitorSpeaking = false;
+let visitorSilenceTimer = null;
+const VISITOR_SILENCE_MS = 1500;
+// Caps how long steady background noise (never recognized as real speech by the
+// server) can hold autoplay. Real speech is covered by replyPending instead.
+let visitorSpeakingMaxTimer = null;
+const VISITOR_SPEAKING_MAX_MS = 12000;
+// A barge-in, or server-detected speech, means a reply is coming even if local
+// voice detection stays silent (a suspended AudioContext, some mic setups).
+let replyPending = false;
+let replyPendingTimer = null;
+const REPLY_PENDING_MAX_MS = 20000;
+// Mirrors the session's own responsePending/responseSettled events, for the
+// autoplay gate and the avatar pip's pending cue.
+let responsePending = false;
+let memoryCleared = false;
 let lastAvatarTextEndedWithQuestion = false;
 let pdfDoc = null;
 let renderGeneration = 0;
@@ -252,8 +290,6 @@ let avatarBubbleAt = 0;
 let lastBubbleRole = null;
 let lastBubbleText = '';
 let pendingNavNudge = null;
-let resumeSlide = 0;
-let pendingResume = 0;
 const cleanInterests = (list) => Array.isArray(list) ? [...new Set(list.map((s) => String(s).trim()).filter(Boolean))].slice(0, 12) : [];
 let recentTypedTexts = []; // { norm, at } of texts the user typed; the server echoes them back as 'user' transcripts
 let awaitingTyped = null; // { norm, payload, resent } for the typed question still waiting on its echo
@@ -261,6 +297,9 @@ let sessionEnded = false;
 let goodbyePending = false;
 let goodbyeGraceTimer = null;
 let deckPausedAfterGoodbye = false;
+// The brain can answer a goodbye with an end-session tool call after the visitor
+// has already moved on to another slide. That call must not end the session.
+let visitorNavigatedSinceMessage = false;
 let contactModalOpen = false;
 let contactSubmitted = false;
 let contactDeclined = false;
@@ -363,7 +402,7 @@ function updateTOCHighlight(slideNum) {
 
 // ── Nav nudge text ──
 function nextSlideClose(slideNum) {
-  if (slideNum >= totalSlides()) return '';
+  if (slideNum >= totalSlides() || autoPlayHeldAfterBack) return '';
   const next = SLIDE_DATA[slideNum]?.title;
   if (!next) return '';
   const template = NAV_PROMPTS.navNudges['close-segue'] || '';
@@ -430,6 +469,7 @@ function sendTyped(text) {
   const trimmed = text.trim();
   if (!trimmed) return;
   rememberTyped(trimmed);
+  visitorNavigatedSinceMessage = false;
   const hint = routeHint(trimmed);
   const payload = hint ? `${trimmed}\n${hint}` : trimmed;
   const pending = { norm: normalizeTyped(trimmed), payload, resent: false };
@@ -442,25 +482,34 @@ function sendTyped(text) {
     resendTyped('no echo');
   }, TYPED_ECHO_TIMEOUT_MS);
 }
+// speak() throws disclosure_required until startSession() acknowledges the
+// disclosure, which happens only after connect() resolves. Text typed while the
+// session is still connecting waits for the ack instead of being dropped.
+let disclosureAcked = false;
+let resolveDisclosureAcked;
+const disclosureAckedPromise = new Promise((resolve) => { resolveDisclosureAcked = resolve; });
+
 // KalturaAvatarSession has no sendText(): typed/nudge text goes through speak(),
 // and a mid-utterance send needs interrupt() first or the server queues it behind
 // the avatar's current turn instead of running it now.
 function speakInterrupting(text) {
   if (!session || sessionEnded) return;
+  if (!disclosureAcked) { disclosureAckedPromise.then(() => speakInterrupting(text)); return; }
   // The SDK can deliver the agent's first navigate_to_slide tool call before
   // session.state flips to 'connected' (connect() resolves after the join
   // handshake, but a queued tool-call event can land in the same tick). Wait
   // for 'connected' rather than assume it, so an early slide-change nudge
   // doesn't throw KalturaError('speak() requires a connected session').
+  const speak = () => session.speak(text).catch((err) => addDebugEntry(`speak failed: ${err.code || err.message}`));
   const send = () => {
     if (!session || sessionEnded) return;
-    if (session.state === 'connected') { session.speak(text); return; }
+    if (session.state === 'connected') { speak(); return; }
     let fired = false;
-    const offState = session.on('stateChange', (state) => {
+    const offState = session.on('stateChange', ({ state } = {}) => {
       if (fired || state !== 'connected') return;
       fired = true;
       offState();
-      if (session && !sessionEnded) session.speak(text);
+      if (session && !sessionEnded) speak();
     });
     setTimeout(() => { if (!fired) offState(); }, 5000);
   };
@@ -475,9 +524,6 @@ function speakInterrupting(text) {
 
 // ── Navigation ──
 let currentSlideNum = 1;
-function resumeTarget() {
-  return pendingResume > 0 ? pendingResume : 0;
-}
 function goToSlide(n, reason = 'user') {
   if (n < 1 || n > totalSlides()) return;
   presenter?.goTo(n, reason);
@@ -557,6 +603,9 @@ function renderMicStats() {
 }
 
 function addDebugEntry(text) {
+  // Kept even when the transcript panel is hidden or missing, so a browser
+  // harness can read exact startup timings from it.
+  (window.__debugTimeline ||= []).push({ tMs: performance.now(), text });
   if (!el.transcriptBody) return;
   const empty = el.transcriptBody.querySelector('.transcript-empty');
   if (empty) empty.remove();
@@ -590,12 +639,28 @@ function updateSlideUI(n) {
   renderPage(n);
 }
 
-function onSlideChange(n, reason) {
+function onSlideChange(n, _slide, reason) {
+  // A slide change after a goodbye means the visitor is still watching, so the
+  // pending disconnect must not cut off the slide that is starting now.
+  cancelGoodbyeGrace();
   deckPausedAfterGoodbye = false;
+  if (!['avatar', 'resume', 'autoplay'].includes(reason)) visitorNavigatedSinceMessage = true;
+  deckPresenting = true;
+  visitorInQnA = false;
+  cancelAutoPlay();
   updateSlideUI(n);
-  if (reason === 'resume') pendingResume = 0;
+  // Keep the intellect's rejoin hint current so a reconnect mid-deck resumes
+  // from where the visitor actually is, not from the join-time snapshot.
+  if (session?.state === 'connected') {
+    const label = SLIDE_DATA[n - 1]?.title;
+    session.updateRequestVars({ rejoin_slide: n, ...(label ? { rejoin_label: label } : {}) });
+  }
   const nudgeReason = pendingNavNudge || reason || 'default';
   pendingNavNudge = null;
+  // A nav tool call ('avatar', 'resume') lands mid-turn while the brain waits for
+  // the ack, and the ack already carries this slide's content. A nudge sent now
+  // would start a new turn and cancel the answer the brain is about to give.
+  if (nudgeReason === 'avatar' || nudgeReason === 'resume') return;
   speakInterrupting(navNudgeText(nudgeReason, n));
 }
 
@@ -621,7 +686,7 @@ async function renderPage(n) {
   const generation = ++renderGeneration;
   if (currentRenderTask) {
     try { currentRenderTask.cancel(); } catch { /* already done */ }
-    // cancel() doesn't settle task.promise synchronously — starting a new render
+    // cancel() doesn't settle task.promise synchronously. Starting a new render
     // on the same canvas before the old one settles can leave it hung forever.
     await currentRenderTask.promise.catch(() => {});
   }
@@ -755,7 +820,7 @@ function handleGoodbye() {
   goodbyePending = true;
   deckPausedAfterGoodbye = true;
   cancelAutoPlay(); // an in-flight countdown must not fire and advance the deck after goodbye
-  addDebugEntry('goodbye detected — grace period started');
+  addDebugEntry('goodbye detected, grace period started');
   goodbyeGraceTimer = setTimeout(() => {
     session?.disconnect();
     showSessionEnded('goodbye');
@@ -773,8 +838,8 @@ function cancelGoodbyeGrace() {
 function showSessionEnded(reason) {
   sessionEnded = true;
   const messages = {
-    goodbye: "Thanks for joining! Start a new session anytime to keep exploring — it'll pick up where you left off.",
-    expired: 'This session has ended. Start a new one to keep going — the deck picks up where you left off.',
+    goodbye: "Thanks for joining! Start a new session anytime to keep exploring. It'll pick up where you left off.",
+    expired: 'This session has ended. Start a new one to keep going. The deck picks up where you left off.',
     error: 'The avatar connection ended unexpectedly. Start a new session to try again.',
   };
   el.sessionEndedMessage.textContent = messages[reason] || messages.error;
@@ -783,6 +848,27 @@ function showSessionEnded(reason) {
 }
 
 // ── Autoplay ──
+// One snapshot builder feeds the pure autoPlayBlocked() gate, so the same rules
+// apply whether we're deciding to schedule a countdown or deciding, when it
+// fires, whether the world changed underneath it.
+function autoPlaySnapshot() {
+  return {
+    sessionRevealed,
+    openingDone,
+    deckPresenting,
+    autoPlayEnabled,
+    heldAfterBack: autoPlayHeldAfterBack,
+    isPaused,
+    sessionEnded,
+    deckPausedAfterGoodbye,
+    visitorSpeaking,
+    replyPending,
+    typing: !!el.chatInput.value.trim(),
+    avatarSpeaking,
+    sessionSpeaking: !!session?.speaking,
+    responsePending,
+  };
+}
 function cancelAutoPlay() {
   clearTimeout(autoPlayTimer);
   autoPlayTimer = null;
@@ -790,14 +876,60 @@ function cancelAutoPlay() {
 }
 function scheduleAutoPlay(delay = AUTO_PLAY_DELAY_MS) {
   cancelAutoPlay();
-  if (!autoPlayEnabled || isPaused || sessionEnded || deckPausedAfterGoodbye) return;
-  const wait = lastAvatarTextEndedWithQuestion ? AUTO_PLAY_AFTER_QUESTION_MS : delay;
+  if (autoPlayBlocked(autoPlaySnapshot())) return;
+  const wait = visitorInQnA || lastAvatarTextEndedWithQuestion ? AUTO_PLAY_AFTER_QUESTION_MS : delay;
   showCountdown(wait);
   autoPlayTimer = setTimeout(() => {
-    if (currentSlideNum < totalSlides() && !userInteractedRecently && !avatarSpeaking) {
-      goToSlide(currentSlideNum + 1, 'autoplay');
-    }
+    cancelAutoPlay();
+    if (autoPlayBlocked(autoPlaySnapshot()) || currentSlideNum >= totalSlides()) return;
+    goToSlide(currentSlideNum + 1, 'autoplay');
   }, wait);
+}
+// Local mic voice activity: held while the visitor is plainly still talking, and
+// released VISITOR_SILENCE_MS after the mic goes quiet. Capped by
+// VISITOR_SPEAKING_MAX_MS so steady background noise can't hold autoplay forever.
+function releaseVoiceHold() {
+  clearTimeout(visitorSilenceTimer);
+  clearTimeout(visitorSpeakingMaxTimer);
+  visitorSilenceTimer = null;
+  visitorSpeakingMaxTimer = null;
+  visitorSpeaking = false;
+}
+function onLocalVoice(speaking) {
+  if (speaking) {
+    clearTimeout(visitorSilenceTimer);
+    visitorSilenceTimer = null;
+    if (!visitorSpeaking) {
+      visitorSpeaking = true;
+      cancelAutoPlay();
+      visitorSpeakingMaxTimer = setTimeout(releaseVoiceHold, VISITOR_SPEAKING_MAX_MS);
+    }
+    return;
+  }
+  if (!visitorSpeaking || visitorSilenceTimer) return;
+  visitorSilenceTimer = setTimeout(releaseVoiceHold, VISITOR_SILENCE_MS);
+}
+// A barge-in or server-detected speech means a reply is coming even when local
+// voice detection stays silent. Capped by REPLY_PENDING_MAX_MS so a reply that
+// never arrives can't hold autoplay forever.
+function holdForReply() {
+  replyPending = true;
+  cancelAutoPlay();
+  clearTimeout(replyPendingTimer);
+  replyPendingTimer = setTimeout(releaseReplyHold, REPLY_PENDING_MAX_MS);
+}
+function releaseReplyHold() {
+  clearTimeout(replyPendingTimer);
+  replyPendingTimer = null;
+  replyPending = false;
+}
+// A real visitor turn (not a barge-in noise blip) means the deck is genuinely in
+// use, and puts the current slide into Q&A mode for the next countdown.
+function noteVisitorTurn() {
+  visitorNavigatedSinceMessage = false;
+  deckPresenting = true;
+  visitorInQnA = true;
+  cancelAutoPlay();
 }
 function showCountdown(ms) {
   countdownEndsAt = Date.now() + ms;
@@ -823,9 +955,7 @@ function hideCountdown() {
   el.autoplayRingProgress.style.strokeDashoffset = String(RING_CIRCUMFERENCE);
 }
 function markUserInteraction() {
-  userInteractedRecently = true;
-  clearTimeout(userInteractionTimer);
-  userInteractionTimer = setTimeout(() => { userInteractedRecently = false; }, RECENT_INTERACTION_MS);
+  cancelAutoPlay();
 }
 function setAutoPlayUI(enabled) {
   autoPlayEnabled = enabled;
@@ -846,7 +976,7 @@ function togglePause() {
   } else {
     session.resume?.();
     presenter?.refreshContext();
-    speakInterrupting(`${RESUME_CUE_PREFIX} The viewer has resumed — briefly continue where you left off.`);
+    speakInterrupting(`${RESUME_CUE_PREFIX} The viewer has resumed. Briefly continue where you left off.`);
     scheduleAutoPlay();
   }
 }
@@ -971,7 +1101,7 @@ function initChatLogDrag() {
 // ── Widget token + appInit prefetch ──
 // Fired at page load (see init()) so the token mint + appInit round-trip
 // overlaps the welcome/disclaimer dwell time instead of blocking after the
-// Start click. initAvatar() just awaits the same promise.
+// Start click. preloadAvatar() just awaits the same promise.
 let appInitPromise = null;
 
 function prefetchAppInit() {
@@ -981,155 +1111,214 @@ function prefetchAppInit() {
       throw new Error('WIDGET_ID is not set. Build with node engine/bundle.mjs (it reads the widget id from .provisioning-state.json, or pass --widget-id).');
     }
     const mgmt = new Management({ partnerId: PARTNER_ID });
+    addDebugEntry('startup: requesting widget token');
     let token = await mgmt.sessions.createWidgetToken({ widgetId: WIDGET_ID });
+    addDebugEntry('startup: widget token acquired');
     let init;
     try {
       init = await mgmt.application.appInit(token.ks);
+      addDebugEntry('startup: appInit ok (first try)');
     } catch (err) {
       if (err.status === 401 || err.code === 'unauthorized') {
         token = await mgmt.sessions.createWidgetToken({ widgetId: WIDGET_ID });
         init = await mgmt.application.appInit(token.ks);
+        addDebugEntry('startup: appInit ok (retry after 401)');
       } else {
         throw err;
       }
     }
     return init;
   })();
-  appInitPromise.catch(() => {}); // swallow here; initAvatar()'s own await surfaces the real error
+  appInitPromise.catch(() => {}); // swallow here; preloadAvatar()'s own await surfaces the real error
   return appInitPromise;
 }
 
 // ── SDK session wiring ──
-async function initAvatar() {
-  const video = document.createElement('video');
-  video.autoplay = true;
-  video.playsInline = true;
-  el.avatarPip.insertBefore(video, el.avatarPip.firstChild);
+// Split into two phases so the socket/media handshake overlaps the welcome and
+// disclaimer dwell time instead of blocking after the visitor's acknowledge
+// click. preloadAvatar() runs on Continue; startSession() runs on acknowledge.
+let avatarPreloadPromise = null;
+function preloadAvatar() {
+  if (avatarPreloadPromise) return avatarPreloadPromise;
+  avatarPreloadPromise = (async () => {
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    el.avatarPip.insertBefore(video, el.avatarPip.firstChild);
 
-  const audio = document.createElement('audio');
-  audio.autoplay = true;
-  audio.style.display = 'none';
-  document.body.appendChild(audio);
+    const audio = document.createElement('audio');
+    audio.autoplay = true;
+    audio.style.display = 'none';
+    document.body.appendChild(audio);
 
-  const init = await prefetchAppInit();
+    const init = await prefetchAppInit();
 
-  session = new KalturaAvatarSession({
-    token: init.ks,
-    conversationManagerUrl: init.conversationManagerUrl,
-    srsBaseUrl: init.srsBaseUrl,
-    turnServerUrl: init.turnServerUrl,
-    videoEl: video,
-    audioEl: audio,
-    socketFactory: (url, opts) => window.io(url, opts),
-    micStartMode: 'deferred',
-    noiseProcessor: gatedMicProcessor,
-    toolSpiralLimit: 3,
-    hardToolSpiralLimit: 5,
-  });
+    // A read-only peek at the SAME memory record Presenter itself owns (see
+    // presenter-memory.js). This is join-time, before Presenter exists, so the
+    // avatar's opening greeting can reference the resume point right away,
+    // not only once Presenter's own later page_context injection runs.
+    const resumeSlide = peekResumeSlide(window.localStorage, Date.now, totalSlides());
+    const resumeLabel = resumeSlide ? SLIDE_DATA[resumeSlide - 1]?.title : undefined;
 
-  presenter = new Presenter({
-    session,
-    slides: SLIDE_DATA,
-    context: PRESENTER_CONTEXT,
-    onSlideChange,
-    storage: window.localStorage,
-    toolCallName: TOOL_NAMES.nav,
-    deckOutline: true,
-    extraMemory: (questions) => ({
-      interests: cleanInterests(questions),
-      contactDeclined: contactDeclined && !contactSubmitted,
-    }),
-    restoreMemory: (m) => {
-      let contactProvided = false;
-      try { contactProvided = !!window.localStorage.getItem(CONTACT_STORAGE_KEY); } catch { /* storage unavailable */ }
-      return {
-        interests: cleanInterests(m.interests),
-        ...(contactProvided ? { contact_provided: true } : {}),
-        ...(!contactProvided && m.contactDeclined ? { contact_declined: true } : {}),
-      };
-    },
-  });
+    session = new KalturaAvatarSession({
+      token: init.ks,
+      conversationManagerUrl: init.conversationManagerUrl,
+      srsBaseUrl: init.srsBaseUrl,
+      turnServerUrl: init.turnServerUrl,
+      videoEl: video,
+      audioEl: audio,
+      socketFactory: (url, opts) => window.io(url, opts),
+      noiseProcessor: gatedMicProcessor,
+      toolSpiralLimit: 3,
+      requireDisclosureAck: true,
+      requestVars: resumeSlide ? { resume_slide: resumeSlide, resume_label: resumeLabel || '' } : {},
+    });
 
-  const last = presenter.memory?.lastSlide;
-  resumeSlide = typeof last === 'number' && last > 1 && last < totalSlides() ? last : 0;
-  pendingResume = resumeSlide;
-  if (resumeSlide) addDebugEntry(`resume armed: slide ${resumeSlide}`);
+    presenter = new Presenter({
+      session,
+      slides: SLIDE_DATA,
+      context: PRESENTER_CONTEXT,
+      onSlideChange,
+      storage: window.localStorage,
+      toolCallName: TOOL_NAMES.nav,
+      deckOutline: true,
+      extraMemory: (questions) => ({
+        interests: cleanInterests(questions),
+        contactDeclined: contactDeclined && !contactSubmitted,
+      }),
+      restoreMemory: (m) => {
+        let contactProvided = false;
+        try { contactProvided = !!window.localStorage.getItem(CONTACT_STORAGE_KEY); } catch { /* storage unavailable */ }
+        return {
+          interests: cleanInterests(m.interests),
+          ...(contactProvided ? { contact_provided: true } : {}),
+          ...(!contactProvided && m.contactDeclined ? { contact_declined: true } : {}),
+        };
+      },
+    });
 
-  const presenterGoTo = presenter.goTo.bind(presenter);
-  presenter.goTo = (n, reason = 'user') => {
-    if (contactModalOpen) return;
-    if (isWithinCooldown(contactClosedAt, Date.now(), NAV_BLOCK_AFTER_CONTACT_MS)) return;
-    if (resumeTarget() && reason !== 'resume') {
-      if (n === 1) {
-        pendingResume = 0; // visitor chose to start fresh instead of resuming
-      } else {
-        const target = resumeTarget();
-        pendingResume = 0;
-        pendingNavNudge = 'resume';
-        presenterGoTo(target, 'resume');
-        return;
+    const presenterGoTo = presenter.goTo.bind(presenter);
+    presenter.goTo = (n, reason = 'user') => {
+      if (contactModalOpen) return;
+      if (isWithinCooldown(contactClosedAt, Date.now(), NAV_BLOCK_AFTER_CONTACT_MS)) return;
+      // A manual move to an earlier slide holds autoplay so it doesn't send the
+      // visitor straight back to where they just asked to leave.
+      if (reason !== 'autoplay' && reason !== 'resume' && n !== currentSlideNum) {
+        autoPlayHeldAfterBack = n > 1 && n < currentSlideNum;
+        if (autoPlayHeldAfterBack) cancelAutoPlay();
       }
-    }
-    pendingNavNudge = reason;
-    presenterGoTo(n, reason);
-  };
-
-  registerSessionEvents(session);
-
-  if (TOOL_NAMES.contact) {
-    session.onToolCall(TOOL_NAMES.contact, (args) => openContactModal(args?.reason || 'agent'));
-  }
-  if (TOOL_NAMES.endSession) {
-    session.onToolCall(TOOL_NAMES.endSession, () => handleGoodbye());
-  }
-  session.onToolCall(TOOL_NAMES.nav, (args, call) => {
-    if (call.toolMetadata?.waitForResponse && call.toolMetadata.id) {
-      session.respondToTool(call.toolMetadata.id, { ok: true, slide_num: args?.slide_num ?? null });
-    }
-  });
-
-  try {
-    await session.connect();
-  } catch (err) {
-    showToast('Could not connect to the avatar. Please refresh.', 'error');
-    throw err;
-  }
-
-  try {
-    await session.startMic();
-    addDebugEntry('mic started');
-  } catch (err) {
-    const micErrors = {
-      NotAllowedError: 'Microphone access was denied. Allow it in your browser settings to talk with the avatar.',
-      NotFoundError: 'No microphone was found on this device.',
+      pendingNavNudge = reason;
+      presenterGoTo(n, reason);
     };
-    showToast(micErrors[err.code] || micErrors[err.name] || 'Could not start the microphone.', 'warn');
+
+    registerSessionEvents(session, video);
+
+    if (TOOL_NAMES.contact) {
+      session.onToolCall(TOOL_NAMES.contact, (args) => openContactModal(args?.reason || 'agent'));
+    }
+    if (TOOL_NAMES.endSession) {
+      session.onToolCall(TOOL_NAMES.endSession, () => {
+        if (visitorNavigatedSinceMessage) addDebugEntry('end-session call ignored: the visitor navigated after their last message');
+        else handleGoodbye();
+      });
+    }
+    session.onToolCall(TOOL_NAMES.nav, (args, call) => {
+      if (!call.toolMetadata?.waitForResponse || !call.toolMetadata.id) return;
+      // Presenter's own nav handler (registered ahead of this one, since
+      // `presenter = new Presenter(...)` above already wired it) runs first and,
+      // for a 'resume' call, has already resolved the real target and moved the
+      // deck there. Ack the slide actually landed on, not the tool call's arg.
+      const ackSlide = args?.reason === 'resume' ? presenter.current : args?.slide_num;
+      session.respondToTool(call.toolMetadata.id, navAckPayload(SLIDE_DATA, ackSlide));
+    });
+
+    addDebugEntry('startup: session.connect() called');
+    try {
+      await session.connect();
+      addDebugEntry('startup: session.connect() resolved');
+    } catch (err) {
+      if (sessionRevealed) showToast('Could not connect to the avatar. Please refresh.', 'error');
+      throw err;
+    }
+  })();
+  return avatarPreloadPromise;
+}
+
+async function startSession() {
+  await preloadAvatar();
+  sessionRevealed = true;
+  if (pendingDisclosureText) {
+    showToast(pendingDisclosureText, 'info');
+    pendingDisclosureText = null;
   }
 
+  await session.acknowledgeDisclosure();
+  disclosureAcked = true;
+  resolveDisclosureAcked();
+
+  const micErrors = {
+    mic_permission_denied: 'Microphone access was denied. Allow it in your browser settings to talk with the avatar.',
+    mic_not_found: 'No microphone was found on this device.',
+    mic_in_use: 'Your microphone is being used by another app.',
+  };
+  addDebugEntry('startup: session.startMic() called');
+  session.startMic()
+    .then(() => addDebugEntry('mic started'))
+    .catch((err) => {
+      showToast(micErrors[err.code] || micErrors[err.name] || 'Could not start the microphone.', 'warn');
+    });
+
+  addDebugEntry('startup: presenter.start() called');
   await presenter.start();
+  addDebugEntry('startup: presenter.start() resolved');
   updateSlideUI(1);
-  scheduleAutoPlay();
 
   captions = new CaptionService(session, { replacements: CAPTION_MAP });
   captions.onCaption(({ text, clear }) => {
     if (!ccEnabled) return;
     el.captionText.textContent = clear ? '' : toReadableText(text);
   });
-
-  window.addEventListener('beforeunload', () => {
-    pageUnloading = true;
-    presenter?.saveMemory();
-    presenter?.destroy();
-    session?.disconnect();
-  });
 }
 
-function registerSessionEvents(sess) {
-  sess.on('stateChange', (state) => {
+function registerSessionEvents(sess, video) {
+  // Media readiness needs BOTH: a decoded video frame actually on screen, and
+  // the SDK's own 'mediaReady' (audio/video tracks attached). Either alone can
+  // still show a stale or not-yet-synced frame.
+  let frameReady = false;
+  let mediaReady = false;
+  const revealAvatar = () => {
+    if (!frameReady || !mediaReady) return;
+    clearConnectTimeout();
+    el.avatarLoading.classList.add('hidden');
+  };
+  const awaitNewFrame = () => {
+    frameReady = false;
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      video.requestVideoFrameCallback(() => {
+        frameReady = true;
+        addDebugEntry('first video frame');
+        revealAvatar();
+      });
+    } else {
+      const onLoadedData = () => {
+        video.removeEventListener('loadeddata', onLoadedData);
+        frameReady = true;
+        addDebugEntry('first video frame');
+        revealAvatar();
+      };
+      video.addEventListener('loadeddata', onLoadedData);
+    }
+  };
+  awaitNewFrame();
+  sess.on('videoMetadata', ({ videoWidth, videoHeight } = {}) => addDebugEntry(`video metadata: ${videoWidth}x${videoHeight}`));
+
+  sess.on('stateChange', ({ state } = {}) => {
     addDebugEntry(`state: ${state}`);
-    if (state === 'connecting') showToast('Connecting to the avatar…', 'info');
+    if (state === 'connecting' && sessionRevealed) showToast('Connecting to the avatar…', 'info');
   });
+  sess.on('connectivityChanged', ({ channel, state } = {}) => addDebugEntry(`connectivity[${channel}]: ${state}`));
   sess.on('streamReady', () => addDebugEntry('stream ready'));
+  sess.on('track', ({ track } = {}) => addDebugEntry(`track received: ${track?.kind}`));
   let connectTimeoutId = null;
   const clearConnectTimeout = () => { clearTimeout(connectTimeoutId); connectTimeoutId = null; };
   const armConnectTimeout = () => {
@@ -1150,10 +1339,11 @@ function registerSessionEvents(sess) {
     el.avatarLoadingLabel.textContent = message;
     el.avatarLoading.classList.remove('hidden');
     el.avatarLoading.classList.add('failed');
-    showToast(message, 'error', { sticky: true });
+    if (sessionRevealed) showToast(message, 'error', { sticky: true });
   };
   armConnectTimeout();
-  sess.on('mediaReady', () => { clearConnectTimeout(); el.avatarLoading.classList.add('hidden'); });
+  sess.on('mediaReady', () => { mediaReady = true; revealAvatar(); });
+  sess.on('micStarted', () => addDebugEntry('sdk: mic started (media flowing)'));
   sess.on('error', (err) => {
     addDebugEntry(`error: ${err?.message || err}`);
     showAvatarFailed('Something went wrong with the avatar connection. Refresh to try again.');
@@ -1163,12 +1353,29 @@ function registerSessionEvents(sess) {
       showToast("Click anywhere to enable the avatar's voice.", 'info');
       const onClick = () => { sess.startPlayback(); document.removeEventListener('click', onClick); };
       document.addEventListener('click', onClick, { once: true });
+    } else if (warning?.code === 'mic_attach_failed') {
+      showToast('The microphone could not be attached. Try muting and unmuting to retry.', 'warn');
     }
   });
 
-  sess.on('avatarStartTalking', () => { avatarSpeaking = true; el.avatarPip.classList.add('thinking'); });
-  sess.on('avatarStopTalking', () => { avatarSpeaking = false; el.avatarPip.classList.remove('thinking'); });
-  sess.on('interrupted', () => { avatarSpeaking = false; });
+  sess.on('avatarStartTalking', () => {
+    avatarSpeaking = true;
+    cancelAutoPlay();
+    el.avatarPip.classList.add('thinking');
+    addDebugEntry('avatar started talking');
+  });
+  sess.on('avatarStopTalking', () => {
+    avatarSpeaking = false;
+    el.avatarPip.classList.remove('thinking');
+    addDebugEntry('avatar stopped talking');
+    releaseReplyHold();
+    openingDone = true;
+    scheduleAutoPlay();
+  });
+  // An interrupted turn never gets avatarStopTalking. turnEnd schedules autoplay instead.
+  sess.on('interrupted', () => { avatarSpeaking = false; el.avatarPip.classList.remove('thinking'); });
+  sess.on('userStartedTalking', () => holdForReply());
+  sess.on('localSpeakingChanged', ({ speaking } = {}) => onLocalVoice(speaking));
   sess.on('transcript', ({ type, text }) => {
     if (type === 'partial' || !text) return;
     if (type === 'user') {
@@ -1190,6 +1397,8 @@ function registerSessionEvents(sess) {
       if (avatarSpeaking) micStats.bargeIns++;
       appendChatMessage(viewerText, 'user');
       markUserInteraction();
+      noteVisitorTurn();
+      if (STAY_HERE_PHRASE_RE.test(viewerText)) setAutoPlayUI(false);
       if (TOOL_NAMES.endSession && GOODBYE_PHRASE_RE.test(viewerText)) handleGoodbye();
       else cancelGoodbyeGrace();
     } else {
@@ -1206,11 +1415,22 @@ function registerSessionEvents(sess) {
     }
   });
   sess.on('brainSegment', () => {});
-  sess.on('responsePending', () => {});
-  sess.on('responseSettled', () => { scheduleAutoPlay(); });
+  sess.on('responsePending', () => {
+    responsePending = true;
+    el.avatarPip.classList.add('pending');
+  });
+  // Autoplay is scheduled from turnEnd, not responseSettled: the SDK settles on the
+  // first output (a nav tool call counts), before the avatar has spoken.
+  sess.on('responseSettled', () => {
+    responsePending = false;
+    el.avatarPip.classList.remove('pending');
+  });
+  sess.on('turnEnd', () => scheduleAutoPlay());
 
   sess.on('reconnecting', () => {
     showToast('Reconnecting…', 'warn');
+    frameReady = false;
+    mediaReady = false;
     // A cold reconnect re-runs the SDK's StV connect internally and fires a
     // fresh 'mediaReady', which is what actually hides this again. Without
     // re-showing it here first, the video element can render a stale or
@@ -1219,7 +1439,11 @@ function registerSessionEvents(sess) {
     // without ever getting there.
     showAvatarConnecting();
   });
-  sess.on('reconnected', () => showToast('Reconnected.', 'info'));
+  sess.on('reconnected', () => {
+    showToast('Reconnected.', 'info');
+    sess.startPlayback();
+    awaitNewFrame();
+  });
   // No dedicated E2E test: forcing a live backend stall on demand isn't
   // possible from the client. resendIfStalled/resendTyped share their guards
   // (count === 1, awaitingTyped.resent) with the client-pure.test.mjs coverage.
@@ -1230,7 +1454,9 @@ function registerSessionEvents(sess) {
   sess.on('spiralRecovered', () => addDebugEntry('tool spiral recovered'));
 
   sess.on('disclosure', (info) => {
-    if (info?.text) showToast(info.text, 'info');
+    if (!info?.text) return;
+    if (sessionRevealed) showToast(info.text, 'info');
+    else pendingDisclosureText = info.text;
   });
   sess.on('timeWarning', ({ remainingTime }) => {
     showToast(`This session is ending in about ${Math.max(1, Math.round((remainingTime || 0) / 1000))}s.`, 'warn');
@@ -1244,12 +1470,17 @@ function bindEvents() {
   el.btnContinue.addEventListener('click', () => {
     el.welcomeStep.classList.add('hidden');
     el.disclaimerStep.classList.remove('hidden');
-    el.disclaimerStep.scrollTop = 0;
+    el.disclaimerScroll.scrollTop = 0;
+    // Fire-and-forget: the disclaimer dwell time overlaps the socket/media
+    // handshake. startSession() awaits this same promise on the acknowledge
+    // click, and preloadAvatar()'s own error path is gated on sessionRevealed
+    // so a preload failure here doesn't toast over the disclaimer.
+    preloadAvatar().catch(() => {});
   });
   el.btnStart.addEventListener('click', async () => {
     el.startOverlay.classList.add('hidden');
     try {
-      await initAvatar();
+      await startSession();
     } catch (err) {
       addDebugEntry(`start failed: ${err.message}`);
       showToast('Could not start the avatar session. Please refresh.', 'error');
@@ -1285,7 +1516,10 @@ function bindEvents() {
   el.slideJumpInput.addEventListener('blur', revealSlideLabel);
   el.slideJumpInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') revealSlideLabel(); });
 
-  el.btnAutoplayToggle.addEventListener('click', () => setAutoPlayUI(!autoPlayEnabled));
+  el.btnAutoplayToggle.addEventListener('click', () => {
+    autoPlayHeldAfterBack = false;
+    setAutoPlayUI(!autoPlayEnabled);
+  });
 
   el.btnCc.addEventListener('click', () => {
     ccEnabled = !ccEnabled;
@@ -1340,7 +1574,11 @@ function bindEvents() {
     a.click();
     URL.revokeObjectURL(a.href);
   });
-  el.btnClearMemory.addEventListener('click', () => { presenter?.clearMemory?.(); showToast('Memory cleared.', 'info'); });
+  el.btnClearMemory.addEventListener('click', () => {
+    memoryCleared = true;
+    presenter?.clearMemory?.();
+    showToast('Memory cleared.', 'info');
+  });
 
   document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape') {
@@ -1359,6 +1597,15 @@ function bindEvents() {
   });
 
   window.addEventListener('resize', clampChatLogWrapperPosition);
+
+  window.addEventListener('beforeunload', () => {
+    pageUnloading = true;
+    // A deliberate "clear memory" click means the visitor wants a fresh start,
+    // so don't let this handler write a new memory record right after.
+    if (!memoryCleared) presenter?.saveMemory();
+    presenter?.destroy();
+    session?.disconnect();
+  });
 }
 
 // ── Boot ──

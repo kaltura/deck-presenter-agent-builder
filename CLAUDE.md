@@ -45,18 +45,18 @@ This is architectural, not a gitignore rule (ARCHITECTURE.md 3): real decks live
 
 **Exit codes** (ARCHITECTURE.md 4): `0` success, `1` unexpected, `2` bad usage, `3` credential or preflight failure, `4` lint or validation failure, `5` provisioning failure with partial state written.
 
-**CLI contract:** `--no-input` / `--yes`, `--json` (result on stdout, progress on stderr), `--dry-run`, and honor `NO_COLOR`. CI cannot sit at an interactive prompt.
+**CLI contract:** `--no-input` / `--yes`, `--json` (result on stdout, progress on stderr), `--dry-run`. No command prints ANSI color, so there is nothing for `NO_COLOR` to suppress. CI cannot sit at an interactive prompt.
 
 ## Layout
 
 | Path | Holds |
 |---|---|
-| `engine/` | Kaltura API scripts: `provision`, `deploy`, `bundle`, `verify`, `teardown`, `update-*`. Parameterized by `project.json` + `.env`. |
+| `engine/` | Kaltura API scripts: `provision`, `deploy`, `bundle`, `verify`, `verify-startup-timing`, `teardown`, `attach-tool`, `attach-knowledge-base`, `eval`, `update-*`. Parameterized by `project.json` + `.env`. |
 | `client/` | The generic presenter web app. Neutral branding, disclosure line, accessibility defaults. |
 | `templates/prompts/` | Prompt skeletons with `{{PLACEHOLDERS}}`. No real wording. |
 | `templates/project/` | The new-project skeleton `create-project.mjs` copies. |
 | `skills/build-deck-agent/` | The pipeline skill. `SKILL.md` plus `reference-*.md`. |
-| `bin/` | `create-project.mjs`, `check-template-update.mjs`, `doctor.mjs`, `scan-leaks.mjs`. |
+| `bin/` | `create-project.mjs`, `check-template-update.mjs`, `doctor.mjs`, `scan-leaks.mjs`, `sync-vendored.mjs`, `lint-prompts.mjs`, `eval-retrieval.mjs`, `extract-pptx-notes.mjs`, `render-routes.mjs`. |
 | `fixtures/smoke-project/` | Three-slide fictional project for testing the engine offline. |
 | `test/` | `node --test` suites. |
 | `demo/` | One fictional product, fake deck, fake notes. |
@@ -64,7 +64,7 @@ This is architectural, not a gitignore rule (ARCHITECTURE.md 3): real decks live
 
 Node 22 or newer. ESM only (`"type": "module"`). Keep dependencies minimal; reach for the standard library first.
 
-The SDK is a pinned git dependency, `github:kaltura/intelligent-agents-sdk#v1.22.0`. It is a public MIT repo with no install-time build scripts, so `npm ci` resolves it cleanly and esbuild bundles it into the client. Import `@kaltura/intelligent-agents/management` server side and `/experience` in the client.
+The SDK is a pinned git dependency, `github:kaltura/intelligent-agents-sdk#v1.23.2`. It is a public MIT repo with no install-time build scripts, so `npm ci` resolves it cleanly and esbuild bundles it into the client. Import `@kaltura/intelligent-agents/management` server side and `/experience` in the client.
 
 ## Things that are easy to get wrong
 
@@ -90,9 +90,10 @@ Prove engine changes offline against the fixture first:
 ```sh
 node engine/bundle.mjs    --project fixtures/smoke-project
 node engine/provision.mjs --project fixtures/smoke-project --dry-run
-node engine/verify.mjs     --project fixtures/smoke-project --dry-run
 ```
 
-Anything past `--dry-run` needs credentials in a gitignored `.env`, copied from `.env.example`. The concrete checklist is at the end of `docs/implementation-appendix.md`.
+`bundle.mjs` needs no credentials. `provision.mjs --dry-run` still checks for a `.env` in the project directory before it prints the plan (exits `3` if none is found), even though it makes no network call; a placeholder `.env` copied from `.env.example` is enough.
+
+`verify.mjs` cannot run this way: every subcommand (`snapshot <label>`, `compare`, `smoke`) mints a live admin session and needs a project already provisioned on a real account, so there is no credential-free or account-free form of it. The concrete checklist, including how to exercise `verify.mjs` against a sandbox account, is at the end of `docs/implementation-appendix.md`.
 
 The live-account regression suite runs only via `workflow_dispatch`, never on a fork PR. Plain `pull_request` runs the secretless checks.

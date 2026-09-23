@@ -1,5 +1,5 @@
-// Shared by client/app.js (bundled into the browser) and test/*.test.mjs —
-// no AudioContext/DOM APIs here, so both can import it as-is.
+// Shared by client/app.js (bundled into the browser) and test/*.test.mjs.
+// No AudioContext/DOM APIs here, so both can import it as-is.
 //
 // Pure math over the mic-level histogram: bin i counts raw-level samples
 // taken at -i dBFS, one sample per stats tick.

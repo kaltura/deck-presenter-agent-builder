@@ -9,14 +9,14 @@ against and to show what a finished project looks like end to end.
 
 ## What's here
 
-- `input/` — a fake deck outline and speaker notes, standing in for the raw
+- `input/`: a fake deck outline and speaker notes, standing in for the raw
   files a real project starts from.
-- `data/slides/`, `data/nav-rules.json`, `data/eval/`, `data/kb/` — the
+- `data/slides/`, `data/nav-rules.json`, `data/eval/`, `data/kb/`: the
   generated content a real build would produce from `input/`.
-- `prompts/` — every prompt surface, filled in with Canopy's content.
-- `client/prompt-format.js`, `content.mjs` — vendored unchanged from
-  `templates/project/`.
-- `docs/build-log.md` — what was invented and why.
+- `prompts/`: every prompt surface, filled in with Canopy's content.
+- `client/prompt-format.js` is vendored unchanged from the toolkit's `client/`.
+  `content.mjs` is vendored unchanged from `templates/project/`.
+- `docs/build-log.md`: what was invented and why.
 
 ## Using it
 
@@ -26,5 +26,6 @@ From the toolkit root:
 node engine/bundle.mjs --project demo
 ```
 
-This project has not been run through `provision`/`deploy`; it is a static
-example, not a live agent.
+The demo is also provisioned on the toolkit's own test account. `.github/workflows/live-e2e.yml`
+runs the browser suite in `test/e2e/` against it on a manual dispatch. Its live ids live only in
+the gitignored `.provisioning-state.json`.

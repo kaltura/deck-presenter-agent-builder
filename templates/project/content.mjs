@@ -1,7 +1,7 @@
 /**
  * Reads project.json, prompts/*.md, and data/slides/*.json, and exports the
  * exact shapes the engine scripts push to Kaltura. Every engine command
- * imports deck-specific values only from here — never hold content in
+ * imports deck-specific values only from here. Never hold content in
  * engine/ or client/ directly.
  *
  * Edit wording in prompts/*.md. Edit this file only to change which prompt
@@ -53,7 +53,7 @@ const VARS = {
   FEEDBACK_DIRECTIVE,
 };
 
-export const AGENT_DISPLAY_NAME = `${project.personaName} — ${project.productName || project.productOrTopic} presenter`;
+export const AGENT_DISPLAY_NAME = `${project.personaName} - ${project.productName || project.productOrTopic} presenter`;
 export const KB_NAME = `${project.slug}-knowledge-base`;
 export const MAX_CONVERSATION_LENGTH = project.sessionMaxSeconds || 900;
 
@@ -192,7 +192,7 @@ const FOLLOWUP_EMAIL_BODY_HTML = `<!DOCTYPE html>
 `;
 
 export const FOLLOWUP_EMAIL_TEMPLATE = {
-  name: `${AGENT_DISPLAY_NAME} — Conversation Insight`,
+  name: `${AGENT_DISPLAY_NAME} - Conversation Insight`,
   adminTags: FOLLOWUP_EMAIL_ADMIN_TAG,
   subject: `New ${VARS.PRODUCT_OR_TOPIC} conversation with ${VARS.PERSONA_NAME}`,
   fromName: `${VARS.PERSONA_NAME}, ${VARS.PRODUCT_OR_TOPIC}`,
@@ -235,7 +235,7 @@ export const FOLLOWUP_INSIGHT_SETTINGS = [
 
 /** Built after the InsightSettings step, once each entity's final id is known. */
 export const followupLifecycleRuleA = (insightSettingsIds) => ({
-  name: `${AGENT_DISPLAY_NAME} — extract insights on session end`,
+  name: `${AGENT_DISPLAY_NAME} - extract insights on session end`,
   systemName: `${project.slug}_session_insights`,
   eventType: 'session_ended',
   objectType: 'thread',
@@ -244,7 +244,7 @@ export const followupLifecycleRuleA = (insightSettingsIds) => ({
 
 /** Built after the email template step, once its final id is known. */
 export const followupLifecycleRuleB = (templateId) => ({
-  name: `${AGENT_DISPLAY_NAME} — email on analysis update`,
+  name: `${AGENT_DISPLAY_NAME} - email on analysis update`,
   systemName: `${project.slug}_send_summary_email`,
   eventType: 'analysis_updated',
   objectType: 'thread',
@@ -299,7 +299,7 @@ const FEEDBACK_EMAIL_BODY_HTML = `<!DOCTYPE html>
 `;
 
 export const FEEDBACK_EMAIL_TEMPLATE = {
-  name: `${AGENT_DISPLAY_NAME} — Visitor Feedback`,
+  name: `${AGENT_DISPLAY_NAME} - Visitor Feedback`,
   adminTags: FEEDBACK_ADMIN_TAG,
   subject: `New feedback on a ${VARS.PRODUCT_OR_TOPIC} conversation with ${VARS.PERSONA_NAME}`,
   fromName: `${VARS.PERSONA_NAME}, ${VARS.PRODUCT_OR_TOPIC}`,
@@ -323,7 +323,7 @@ export const FEEDBACK_INSIGHT_SETTINGS = [
 
 /** Built after the InsightSettings step, once the entity's final id is known. */
 export const feedbackLifecycleRuleA = (insightSettingsIds) => ({
-  name: `${AGENT_DISPLAY_NAME} — extract feedback on session end`,
+  name: `${AGENT_DISPLAY_NAME} - extract feedback on session end`,
   systemName: `${project.slug}_feedback_insight`,
   eventType: 'session_ended',
   objectType: 'thread',
@@ -332,7 +332,7 @@ export const feedbackLifecycleRuleA = (insightSettingsIds) => ({
 
 /** Built after the email template step, once its final id is known. */
 export const feedbackLifecycleRuleB = (templateId) => ({
-  name: `${AGENT_DISPLAY_NAME} — email visitor feedback`,
+  name: `${AGENT_DISPLAY_NAME} - email visitor feedback`,
   systemName: `${project.slug}_feedback_email`,
   eventType: 'analysis_updated',
   objectType: 'thread',

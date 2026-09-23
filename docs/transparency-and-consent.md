@@ -6,7 +6,7 @@ This page explains what a deployed presenter agent does by default, what you as 
 
 A project built with this toolkit ships with these defaults, on unless you change them:
 
-- **AI disclosure.** A visible, screen-reader-reachable line tells the audience they are talking to an AI, not a human. `bundle.mjs` warns if this text would be empty, but does not stop you from shipping without it (see `overrides.acknowledgeWarnings` in `project.json`). That choice, and the risk it carries, is yours.
+- **AI disclosure.** A visible, screen-reader-reachable line tells the audience they are talking to an AI, not a human. If `disclosure.text` in `project.json` is empty, `bundle.mjs` warns and uses the toolkit's default line. The line itself cannot be turned off.
 - **Synthetic-content label when the avatar is cloned.** If `avatar.source` is `"cloned"`, the persistent chrome shows a label saying the voice and appearance are a synthetic recreation. You can add it to the welcome screen too, or suppress it entirely with the same override mechanism.
 - **No audience capture.** No audio or video of the audience is recorded or stored.
 - **Session-only transcripts.** `privacy.transcriptRetention` defaults to `"none"`.
@@ -21,7 +21,7 @@ A project built with this toolkit ships with these defaults, on unless you chang
 - **Whether transcripts feed evaluation or model improvement** (`privacy.reuseForEval`). That's a separate purpose from answering the audience's question, and needs its own basis.
 - **Who your processors are.** Kaltura and your model vendor may each act as a processor for audience data. Getting a data-processing agreement in place with each is on you.
 - **Whether you are a provider or a deployer under the EU AI Act.** This depends on your specific setup (whose brand it runs under, who controls the parameters) and this toolkit can't answer it for you.
-- **Voice or likeness consent**, if you clone a real person's voice or face. `consent/voice-<id>.md` and `consent/visual-<id>.md` templates exist in your project repo for this. A blanket "you may use my voice" is not enough in several jurisdictions; the consent record needs a specific description of the intended use.
+- **Voice or likeness consent**, if you clone a real person's voice or face. Your project repo's `consent/voice-consent.template.md` and `consent/visual-consent.template.md` exist for this: copy one to `voice-<id>.md` or `visual-<id>.md` (`<id>` is the Kaltura catalog id you're cloning from) and fill it in before running `provision`, which refuses the clone path when the matching file is missing. A blanket "you may use my voice" is not enough in several jurisdictions; the consent record needs a specific description of the intended use.
 
 ## 3. Where to check the law
 

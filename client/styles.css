@@ -378,8 +378,9 @@ button, input, textarea { font-family: inherit; }
   text-align: center;
   padding: 0 12px;
   z-index: 2;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
 }
-.avatar-loading.hidden { display: none; }
+.avatar-loading.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 .avatar-loading-label { font-size: 12px; }
 .avatar-loading.failed .avatar-loading-spinner { display: none; }
 .avatar-loading.failed .avatar-loading-label { color: var(--color-danger); }
@@ -459,8 +460,19 @@ button, input, textarea { font-family: inherit; }
   50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 55%, transparent); }
 }
 .avatar-pip.thinking { animation: pipThinking 1200ms ease-in-out infinite; }
+@keyframes pipPending {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-text-muted) 30%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-text-muted) 55%, transparent); }
+}
+/* .thinking (the avatar is talking) already carries its own cue; .pending (a
+   reply is being generated, before the avatar starts talking) only needs its
+   own look when .thinking isn't already showing one. */
+.avatar-pip.pending:not(.thinking) { animation: pipPending 1200ms ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .avatar-pip { animation: none; }
+  /* Same specificity as .avatar-pip.pending:not(.thinking) above, so this wins
+     on source order instead of losing to it on specificity. */
+  .avatar-pip.pending:not(.thinking) { animation: none; }
 }
 
 .ai-content-label {

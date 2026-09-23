@@ -12,4 +12,8 @@ this deck's current outline, not a guess.
 # arg: reason
 
 One short phrase for why you are moving there (e.g. "visitor asked about pricing").
-Not shown to the visitor; used only for debugging.
+Not shown to the visitor, and used only for debugging, with one exception. The
+exact value "resume" tells the client to return to the visitor's last slide from
+a past session, whatever slide_num you pass. Use "resume" only when a returning
+visitor agrees to continue where they left off (see OPENING). Use any other
+short phrase everywhere else.

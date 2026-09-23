@@ -11,6 +11,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { client as buildClientTool } from '@kaltura/intelligent-agents/management';
 import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT, runMain } from './lib/cli.mjs';
 import { connect, adminKs } from './lib/kaltura.mjs';
@@ -19,6 +20,42 @@ import { loadContent } from './lib/load-content.mjs';
 import { assertNamedResourceFree } from './lib/tool-guard.mjs';
 
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// The server stores a tool config with extra fields defaulted (variables_mapping,
+// response_mapping, add_to_history, log_request/response, timeout, a `default: null`
+// on every arg, ...) and may reorder `args` keys. Strip/reorder both sides the same
+// way before comparing, or every run reports a false diff on a config that already
+// matches what we sent.
+const TOOL_CONFIG_SERVER_DEFAULTS = [
+  'variables_mapping', 'response_mapping', 'response_template', 'response_chapters',
+  'add_to_history', 'display_name', 'log_request', 'log_response', 'timeout',
+];
+
+/** Deterministic stringify with object keys sorted, so key order never shows as a diff. */
+export const stableStringify = (v) => {
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`;
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(v[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v);
+};
+
+/** Strips the server-default fields above, plus each arg's `default: null`, from a tool config
+ * before comparison. Exported for direct unit testing. */
+export function normalizeToolConfig(config) {
+  const rest = { ...config };
+  for (const k of TOOL_CONFIG_SERVER_DEFAULTS) delete rest[k];
+  rest.args = Object.fromEntries(
+    Object.entries(rest.args || {}).map(([k, v]) => {
+      const { default: _default, ...argRest } = v;
+      return [k, argRest];
+    }),
+  );
+  return rest;
+}
+
+/** True if two tool configs are equivalent once server defaults are stripped from both. */
+export const eqToolConfig = (current, desired) => stableStringify(normalizeToolConfig(current)) === stableStringify(normalizeToolConfig(desired));
 
 const TOOL_SLOTS = [
   { stateKey: 'navToolId', contentKey: 'NAV_TOOL', enabled: () => true },
@@ -59,7 +96,7 @@ async function main() {
       slots.push({ ...slot, desired, existingId: null, action: 'create' });
     } else {
       const current = await mgmt.tools.get(existingId, ks);
-      const unchanged = current.name === desired.name && eq(current.config, desired);
+      const unchanged = current.name === desired.name && eqToolConfig(current.config, desired);
       slots.push({ ...slot, desired, existingId, current, action: unchanged ? 'unchanged' : 'update' });
     }
   }
@@ -114,7 +151,7 @@ async function main() {
   const errors = [];
   for (const s of slots) {
     const after = await mgmt.tools.get(s.finalId, ks);
-    if (after.name !== s.desired.name || !eq(after.config, s.desired)) errors.push(`${s.stateKey} body did not apply`);
+    if (after.name !== s.desired.name || !eqToolConfig(after.config, s.desired)) errors.push(`${s.stateKey} body did not apply`);
   }
   const afterIntellect = await mgmt.intellects.get(configId, ks);
   if (!eq((afterIntellect.tool_ids || []).map(String), finalToolIds)) errors.push('tool_ids did not apply');
@@ -135,4 +172,6 @@ async function main() {
   result(flags, { ok: true, configId, toolIds: finalToolIds });
 }
 
-runMain(main);
+// Guarded, not unconditional: normalizeToolConfig/stableStringify/eqToolConfig above are also
+// imported directly by tests, which must not trigger a real CLI run just by importing this file.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) runMain(main);

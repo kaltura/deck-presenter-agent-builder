@@ -1,7 +1,7 @@
 <!-- Copy this file to visual-<id>.md, where <id> is the Kaltura visual catalog
 id you are cloning from. Fill in every field before running the avatar
-provisioning step; the engine refuses to clone a visual without a matching,
-complete record. -->
+provisioning step. The engine only checks that this file exists; it does not
+read the fields, so filling them in is on you. -->
 
 # Visual (face) clone consent
 

@@ -38,6 +38,10 @@ test('a typed question renders exactly one chat bubble for it, not a duplicate',
 });
 
 test('typing goodbye pauses autoplay until a real slide navigation happens', async ({ page }) => {
+  // The countdown starts only after the avatar finishes presenting slide 2,
+  // which takes longer than the goodbye grace period. So this also proves the
+  // navigation cancelled the pending disconnect.
+  test.setTimeout(180_000);
   await startSession(page);
   await waitForLiveSession(page);
   await sendChat(page, 'goodbye');
@@ -46,7 +50,8 @@ test('typing goodbye pauses autoplay until a real slide navigation happens', asy
 
   await page.click('#btn-next');
   await expect(page.locator('#slide-jump-input')).toHaveValue('2');
-  await expect(page.locator('#autoplay-digits')).not.toHaveText('', { timeout: 20_000 });
+  await expect(page.locator('#autoplay-digits')).not.toHaveText('', { timeout: 120_000 });
+  await expect(page.locator('#session-ended')).toBeHidden();
 });
 
 test('asking for a follow-up opens the contact form and stops the avatar mid-speech', async ({ page }) => {

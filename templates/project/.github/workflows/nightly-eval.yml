@@ -1,0 +1,126 @@
+name: Nightly eval
+
+# Runs scripts/eval.mjs against the live agent every night.
+# Off until you set the KALTURA_CONFIG_ID repo variable and the
+# KALTURA_PARTNER_ID and KALTURA_ADMIN_SECRET repo secrets. Until then every
+# run skips and stays green. Set EVAL_NOTIFY_USER to a GitHub username to get
+# each report as a comment on an "eval-report" issue.
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      skip_judge:
+        description: 'Skip the LLM-judged checks (faster, deterministic checks only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-eval
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.cfg.outputs.ready }}
+    steps:
+      - id: cfg
+        env:
+          CONFIG_ID: ${{ vars.KALTURA_CONFIG_ID }}
+          PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
+          ADMIN_SECRET: ${{ secrets.KALTURA_ADMIN_SECRET }}
+        run: |
+          if [ -n "$CONFIG_ID" ] && [ -n "$PARTNER_ID" ] && [ -n "$ADMIN_SECRET" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Nightly eval is off. Set the KALTURA_CONFIG_ID variable and the KALTURA_PARTNER_ID and KALTURA_ADMIN_SECRET secrets to turn it on."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  eval:
+    needs: check
+    if: needs.check.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      report_md: ${{ steps.render.outputs.report_md }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - run: npm ci
+
+      # .provisioning-state.json is gitignored. eval.mjs needs partnerId and
+      # configId from it. "adopted" keeps teardown away from this id.
+      - name: Write a minimal state file
+        env:
+          KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
+          KALTURA_CONFIG_ID: ${{ vars.KALTURA_CONFIG_ID }}
+        run: |
+          node -e 'require("fs").writeFileSync(".provisioning-state.json", JSON.stringify({
+            partnerId: process.env.KALTURA_PARTNER_ID, slug: "ci",
+            steps: { configId: { value: Number(process.env.KALTURA_CONFIG_ID), origin: "adopted" } } }))'
+
+      - name: Run eval against the live agent
+        env:
+          KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
+          KALTURA_ADMIN_SECRET: ${{ secrets.KALTURA_ADMIN_SECRET }}
+          SKIP_JUDGE: ${{ inputs.skip_judge && '--skip-judge' || '' }}
+        run: node scripts/eval.mjs --project . --yes --no-input --json ${SKIP_JUDGE:+"$SKIP_JUDGE"} > "$RUNNER_TEMP/eval-result.json"
+
+      - name: Render the report
+        id: render
+        if: always()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          REPORT=$(node -e 'try { console.log(require(process.argv[1]).reportPath || "") } catch { console.log("") }' "$RUNNER_TEMP/eval-result.json")
+          if [ -n "$REPORT" ] && [ -f "$REPORT" ]; then
+            echo "report=$REPORT" >> "$GITHUB_OUTPUT"
+            node .github/scripts/eval-report-md.mjs "$REPORT" "$RUN_URL" > "$RUNNER_TEMP/report.md"
+          else
+            printf '**Nightly eval: ERROR.** The run ended before writing a report. Logs: %s\n' "$RUN_URL" > "$RUNNER_TEMP/report.md"
+          fi
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+          { echo "report_md<<REPORT_EOF"; cat "$RUNNER_TEMP/report.md"; echo "REPORT_EOF"; } >> "$GITHUB_OUTPUT"
+
+      - name: Upload the eval report
+        if: always() && steps.render.outputs.report != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eval-report-${{ github.run_id }}
+          path: ${{ steps.render.outputs.report }}
+          retention-days: 90
+
+  # A separate job, so the job that runs npm ci never holds a token that can
+  # write issues. GitHub emails the comment to the mentioned user.
+  notify:
+    needs: [check, eval]
+    if: always() && needs.check.outputs.ready == 'true' && vars.EVAL_NOTIFY_USER != ''
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NOTIFY: ${{ vars.EVAL_NOTIFY_USER }}
+          REPORT_MD: ${{ needs.eval.outputs.report_md }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create eval-report --color 0e8a16 --description "Nightly eval reports" --force
+          ISSUE=$(gh issue list --label eval-report --state open --json number -q '.[0].number')
+          if [ -z "$ISSUE" ]; then
+            ISSUE=$(gh issue create --title "Nightly eval reports" --label eval-report --assignee "$NOTIFY" \
+              --body "Each nightly eval run posts its report here." | grep -oE '[0-9]+$')
+          fi
+          BODY=${REPORT_MD:-"**Nightly eval: ERROR.** No report. Logs: $RUN_URL"}
+          printf '@%s\n\n%s\n' "$NOTIFY" "$BODY" > "$RUNNER_TEMP/comment.md"
+          gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/comment.md"

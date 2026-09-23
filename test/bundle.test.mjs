@@ -100,10 +100,8 @@ test('scanForEnvLeaks reports no leak when no value appears in the text', () => 
 // project's own content.mjs, whose bare "@kaltura/..." import resolves by
 // walking up from the project directory to find node_modules.
 //
-// test/engine.safety.test.mjs writes .env/.provisioning-state.json directly
-// into this same FIXTURE path for the duration of its run, and node --test
-// runs test files concurrently. Strip any such file this cpSync happens to
-// pick up mid-race, so a "clean copy" here is never contaminated.
+// Strip any gitignored .env or state file a local run left in the fixture,
+// so a "clean copy" here is never contaminated.
 function tempProject() {
   const dir = mkdtempSync(resolve(ROOT, 'bundle-test.tmp-'));
   cpSync(FIXTURE, dir, { recursive: true });

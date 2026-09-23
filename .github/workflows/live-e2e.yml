@@ -32,8 +32,10 @@ jobs:
       # after the first looks like a clean slate to provision.mjs even though
       # the live account already has last run's resources, and it fails with
       # "already exists ... and is not recorded in this project's own state."
-      # The cache key has no varying part: restore whatever the last run
-      # saved, always save the latest state back, so runs stay idempotent.
+      # The restore key below has no varying part, so it always matches the
+      # last saved state via restore-keys prefix fallback. The save step
+      # further down adds the run id, since actions/cache/save fails if its
+      # exact key already exists.
       - name: Restore demo provisioning state
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -41,9 +43,10 @@ jobs:
           key: demo-provisioning-state
           restore-keys: demo-provisioning-state
 
-      # Idempotent: makes no live call if demo's provisioning state already
-      # matches project.json. Needed so a first-ever run on a clean checkout
-      # can still provision the demo project from nothing.
+      # Makes no live call when the restored state already records a
+      # widgetId. It does not diff project.json: pushing changed config is
+      # the update-* commands' job. Needed so a first-ever run on a clean
+      # checkout can still provision the demo project from nothing.
       - name: Provision the demo project
         run: node engine/provision.mjs --project demo --yes --json
         env:

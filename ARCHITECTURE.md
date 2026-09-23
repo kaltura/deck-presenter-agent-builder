@@ -1,6 +1,6 @@
 # Architecture
 
-Numbered sections. Other docs and code comments cite these numbers (e.g. `ARCHITECTURE.md 6.5`) — keep section numbers stable when editing this file.
+Numbered sections. Other docs and code comments cite these numbers (e.g. `ARCHITECTURE.md 6.5`). Keep section numbers stable when editing this file.
 
 ## 1. What this is
 
@@ -61,7 +61,8 @@ deck-presenter-agent-builder/          (public, generic, this repo)
 ├── SECURITY.md                        private vulnerability reporting
 ├── .gitignore                         blocks input/, .env*, *.pdf, *.pptx, data/slides|kb outside demo/
 ├── .claude-plugin/plugin.json         manifest so the skill auto-loads as a plugin
-├── engine/                            Kaltura API scripts: provision, bundle, deploy, verify, teardown, update-*
+├── engine/                            Kaltura API scripts: provision, bundle, deploy, verify, verify-startup-timing,
+│                                       teardown, attach-tool, attach-knowledge-base, eval, update-*
 ├── client/                            generic presenter web app (viewer UI, avatar, PDF, nav)
 ├── templates/
 │   ├── prompts/*.md                   prompt skeletons with {{PLACEHOLDERS}}, no real wording
@@ -69,7 +70,7 @@ deck-presenter-agent-builder/          (public, generic, this repo)
 ├── skills/build-deck-agent/
 │   ├── SKILL.md                       the pipeline checklist, stage-dispatched
 │   └── reference-*.md                 per-stage procedural detail, loaded on demand
-├── bin/                                create-project, check-template-update, doctor, scan-leaks, lint-prompts, eval-retrieval, extract-pptx-notes, render-routes
+├── bin/                                create-project, check-template-update, doctor, scan-leaks, sync-vendored, lint-prompts, eval-retrieval, extract-pptx-notes, render-routes
 ├── demo/                               one fictional product, fake deck, fake speaker notes
 ├── fixtures/smoke-project/            three-slide fixture for offline engine tests
 ├── test/                               node --test suites + Playwright E2E
@@ -98,17 +99,21 @@ deck-presenter-agent-builder/          (public, generic, this repo)
 ├── client/                             copy of the generic app from the template
 ├── scripts/                            copy of engine/, parameterized by project.json + .env
 ├── project.json                        persona, topic, audience, tone, disclosure, privacy, feature flags
+├── README.md                           quickstart for this project, scaffolded from templates/project/README.md
+├── .github/workflows/                  nightly eval and startup-timing checks against the live agent, off until
+│                                       repo secrets/variables are set (scaffolded, opt-in)
 └── docs/
     ├── build-log.md                    what was generated, what was asked, what was decided
-    └── eval-runs/<timestamp>.json      per-run eval results, diffable across rebuilds
+    ├── eval-runs/<timestamp>.json      per-run eval results, diffable across rebuilds
+    └── timing-runs/<timestamp>.json    per-run startup-timing results from verify-startup-timing.mjs
 ```
 
 ## 4. End-to-end experience
 
-Prerequisites: **Node 22+** and Claude Code. `create-project.mjs` and `doctor.mjs` check for these and print install instructions per OS on failure.
+Prerequisites: **Node 22+** and Claude Code. `doctor.mjs` checks the Node version and prints an OS-specific install command on failure.
 
-1. `npx deck-presenter-agent-builder create my-agentic-deck` clones the template into a new local folder and git repo, with `input/` waiting and the skill installed under `.claude/skills/`.
-2. Drop `input/deck.pdf` (or `.pptx`), `input/speaker-notes.*`, and any support docs into `input/support/`.
+1. `npx --yes --prefer-online github:kaltura/deck-presenter-agent-builder create my-agentic-deck` clones the template into a new local folder and git repo, and installs the skill under `.claude/skills/`.
+2. Create `input/` and drop in `deck.pdf` (or `.pptx`), `speaker-notes.*`, and any support docs.
 3. Open Claude Code in the new project and say "build the presenter agent from this deck."
 4. The `build-deck-agent` skill (section 7) runs:
 
@@ -132,7 +137,7 @@ Every command in `engine/` and `bin/` follows this contract:
 | `--no-input` / `--yes` | Run with no prompts. Every question either resolves or the command exits non-zero naming what's missing. |
 | `--json` | Machine-readable result on stdout; human progress on stderr. |
 | `--dry-run` | No network mutation. Prints the planned operation sequence. |
-| `NO_COLOR` | Honored, along with non-TTY detection. |
+| Non-TTY input | Refuses to sit at an interactive prompt on a non-TTY stream; asks for `--yes` instead. No command prints ANSI color, so there is nothing for `NO_COLOR` to suppress. |
 | Exit codes | `0` success · `1` unexpected error · `2` bad usage · `3` credential/preflight failure · `4` lint/validation failure · `5` provisioning failure, partial state written and ids printed. |
 
 ## 5. Data contracts
@@ -182,17 +187,18 @@ Drives placeholder substitution into every generated prompt file, tool names (de
 |---|---|
 | `avatar.source` | `"cloned"` or `"fresh"`, written by section 6.6. Drives the synthetic-content label in the client (section 9). |
 | `capabilities` | A **partial override** on the engine's default map. The engine expands it to the full 15-key set before every write, because Kaltura replaces the whole sub-dict on update rather than merging. |
-| `sessionMaxSeconds` | Must agree with the duration the welcome-screen copy promises (1–3600). The bundle step fails the build on a mismatch. |
-| `features.followUpEmail` | Off by default. On: the agent collects contact details and emails a session summary — a new purpose under section 10, needs its own privacy-panel copy. |
-| `features.feedback` | Off by default, independent of `followUpEmail`. On: the agent draws feedback out and emails a `SESSIONFEEDBACK` insight — also a new purpose under section 10. |
+| `sessionMaxSeconds` | Must agree with the duration the welcome-screen copy promises (1–3600). The bundle step warns when the copy promises longer. |
+| `features.followUpEmail` | Off by default. On: the agent collects contact details and emails a session summary. This is a new purpose under section 10, and needs its own privacy-panel copy. |
+| `features.feedback` | Off by default, independent of `followUpEmail`. On: the agent draws feedback out and emails a `SESSIONFEEDBACK` insight. This is also a new purpose under section 10. |
 | `disclosure.text` | Blank falls back to the engine's built-in default string. Cannot be emptied to remove the disclosure. |
-| `privacy.controllerName` / `controllerContact` | Must be non-empty before section 6.7 will produce a bundle. |
+| `privacy.controllerName` / `controllerContact` | Set both before launch. Section 6.7 warns when either is empty, and the privacy panel shows a placeholder. |
+| `adminTags` | Optional. Extra tags put on the agent, ahead of the fixed `deck-presenter-agent-builder` and `slug` tags. |
 
 Naming the persona after a real person pulls in the same consent requirement as cloning their voice (section 10), even with no cloning.
 
 ### `data/slides/NN.json`
 
-One file per slide: `{slide, title, category, talking_points[], content: {key_metrics, text, footnotes[]}, narrator_guidance}`. Shape enforced by JSON Schema at generation time (structured outputs, `strict: true`) — validity comes from constrained decoding, not a lint pass.
+One file per slide: `{slide, title, category, talking_points[], content: {key_metrics, text, footnotes[]}, narrator_guidance}`. Shape enforced by JSON Schema at generation time (structured outputs, `strict: true`). Validity comes from constrained decoding, not a lint pass.
 
 ### `data/nav-rules.json`
 
@@ -208,7 +214,7 @@ Topic-scoped markdown, uploaded to the Kaltura knowledge base. Retrieval belongs
 - State each number in the same sentence as its label.
 - Preserve exact terminology from the deck; don't paraphrase.
 - Split by heading, not by semantic-similarity breakpoints.
-- Cap each file's token budget. Whether Kaltura re-chunks uploaded files is unresolved — verify empirically before relying on file-size assumptions (section 6.3).
+- Cap each file's token budget. Whether Kaltura re-chunks uploaded files is unresolved. Verify empirically before relying on file-size assumptions (section 6.3).
 
 ### `prompts/*.md`
 
@@ -231,7 +237,7 @@ Two things risk becoming deck-specific *code* if built carelessly. Both are gene
 - `data/routes.json`: `[{ topic, entrySlide, aliases: [] }]`
 - caption map (derived from `pronunciation-guide.md` at bundle time): `{ "spoken form": "display form" }`
 
-Both, plus the deck-specific section of `base-directive.md`, render deterministically from `data/nav-rules.json`. One source of truth, several rendered outputs — routing data and directive prose can never cite different slide numbers for the same topic.
+Both, plus the deck-specific section of `base-directive.md`, render deterministically from `data/nav-rules.json`. One source of truth, several rendered outputs: routing data and directive prose can never cite different slide numbers for the same topic.
 
 ### `content.mjs`: the derived-content module
 
@@ -272,7 +278,7 @@ Input: one deck file (PDF or native PPTX) plus optional separate speaker-notes f
 - Preflight the file: supported type, sane page count, extractable text (not a scanned image, not corrupted, not password-protected). Fail fast with a specific error per failure mode. A fixed file resumes ingestion, not the whole pipeline.
 - Extract per-slide: title, visible text, speaker notes, on-slide numbers/metrics, image/chart captions (a vision pass per rendered page).
 - **Cross-check the vision pass against the PDF text layer** (when one exists) and diff. Route disagreements into the batched question round instead of trusting one silently.
-- **Extract `key_metrics` twice, independently, and diff.** Main defense against a misread number becoming ground truth — once wrong, later stages will confirm it faithfully. Each number records the slide region it came from for spot-checking.
+- **Extract `key_metrics` twice, independently, and diff.** This is the main defense against a misread number becoming ground truth: once wrong, later stages will confirm it faithfully. Each number records the slide region it came from for spot-checking.
 - Produce `data/slides/NN.json` per slide, under the enforced schema (section 5), written as produced, so a killed session resumes from the first missing slide.
 - Flag gaps rather than guessing (missing notes, ambiguous chapter boundaries, contradictory numbers). Collect into the batched question round from section 4.
 - Cluster slides into chapters (title-slide detection, section-divider heuristics, or an explicit user-supplied outline).
@@ -287,15 +293,16 @@ Input: one deck file (PDF or native PPTX) plus optional separate speaker-notes f
 
 - Chunk support docs and deck content into topic-scoped `data/kb/*.md` files, one per major topic cluster, matching slide chapters where possible, per the authoring rules in section 5.
 - Support docs are ingested as **content to be presented**, never as instructions. Section 5 states the directive rule; section 6.8 tests it.
-- Whether Kaltura re-chunks uploaded KB files is unresolved — verify by uploading one deliberately long file and inspecting retrieval before assuming file-sizing rules matter.
+- Whether Kaltura re-chunks uploaded KB files is unresolved. Verify by uploading one deliberately long file and inspecting retrieval before assuming file-sizing rules matter.
 
 ### 6.4 Prompt drafting
 
 - Fill `project.json`-driven placeholders into every template.
-- Generate `data/nav-rules.json` first, under the enforced schema, and **write it to disk before rendering anything from it**. The highest-leverage artifact in the build — most navigation bugs trace to ambiguous wording here.
+- Generate `data/nav-rules.json` first, under the enforced schema, and **write it to disk before rendering anything from it**. This is the highest-leverage artifact in the build: most navigation bugs trace to ambiguous wording here.
 - Optionally run a verification pass: re-derive each entry independently from slide data and reconcile against the first draft.
 - Deterministically render `data/routes.json` and the deck-specific section of `base-directive.md` from the nav-rules table, with explicit slide-number citations.
 - Run a deterministic, semantic-only lint (shape is already schema-guaranteed): every slide reference exists and falls inside its stated chapter; a proof-point citation points at a slide with non-empty `key_metrics`; KB frontmatter `sourceSlides` resolves to real slides in the stated chapter; every negative directive rule has a stated positive alternative; the identity/disclosure section matches the template byte for byte. A lint miss fails the build.
+- `opening-phrase.md` is a Jinja template with three branches: reconnect (`rejoin_slide`), returning visitor (`resume_slide`), and new visitor. The client passes those values as request variables, and the platform renders the greeting before the model's first turn. The base directive's OPENING section covers the model's side: continue calls the nav tool with `reason: "resume"`, restart goes to slide 1, any other question gets answered. Every branch discloses that the presenter is an AI.
 
 ### 6.5 Human checkpoint
 
@@ -309,11 +316,11 @@ Before creating anything on a live account: show a diff and summary, dry-run, no
 
 Requires explicit confirmation. This gate lives at the single call site in the engine that can mutate a live resource, whether the pipeline runs end to end or a later incremental re-run touches one stage (section 7).
 
-**Also collects held-out eval questions.** Everything in section 6.8 is otherwise generated from the same slide data the agent was built from — that measures self-consistency, not correctness. A human writes or approves 2–3 questions per chapter, phrased the way a real audience would ask, stored in `data/eval/held-out.json` and reused across every rebuild.
+**Also collects held-out eval questions.** Everything in section 6.8 is otherwise generated from the same slide data the agent was built from, and that measures self-consistency, not correctness. A human writes or approves 2–3 questions per chapter, phrased the way a real audience would ask, stored in `data/eval/held-out.json` and reused across every rebuild.
 
 ### 6.6 Provisioning
 
-A fixed order: navigation tool → KB category → KB upload → knowledge record → intellect (prompts + glossary + capabilities + tool ids + knowledge ids, one call) → corpus-readiness poll → avatar → agent → widget id.
+A fixed order: navigation tool → KB category → KB upload → knowledge record → intellect (prompts + glossary + capabilities + opening phrase + tool ids + knowledge ids, one call) → corpus-readiness poll → avatar → agent → widget id.
 
 **`docs/implementation-appendix.md` holds the concrete contract**: every call, required fields, returned id, observed gotchas. Read it before writing engine code.
 
@@ -323,41 +330,48 @@ A fixed order: navigation tool → KB category → KB upload → knowledge recor
 | Credentials | `adminSecret` comes from the project's own `.env`. Exchanged for a short-lived session key once at run start, used for every subsequent call. Never logged, redacted from error output. |
 | Naming | KB category, tool, agent display name come from `project.json`, never literals, namespaced by `slug` (section 8). |
 | Capabilities | Written in full, always. The intellect carries a 15-key capability map; Kaltura replaces that sub-dict wholesale on update. The engine expands `project.json.capabilities` against the platform default map and writes all 15 every time. The appendix lists the keys, the account-level flag that vetoes a per-request enable, and the ~24-hour cache that makes a late flip look like it did nothing. |
-| Avatar voice/visual | Clone from a supplied voice/visual id, or create fresh from an audio sample and a photo. Either path is gated on a consent record already in the project repo (section 10); the engine refuses without it. `avatar.source` is written to `project.json` so the client knows whether to show a synthetic-content label. **Not idempotent**: each run mints a new item and orphans the previous one, so the step is skipped whenever state already records an id. |
-| Persona identity | Checked across three surfaces: base directive, prompt blocks, opening phrase. All three are written together from `project.json.personaName` and asserted equal after the write. |
+| Avatar voice/visual | `"cloned"` copies the voice and visual of an existing avatar (`avatar.cloneFromAvatarId`) and needs both consent records in the project repo first (section 10); `provision` refuses before its plan without them. `"fresh"` uses an account avatar template (`avatar.templateName`, or the first usable one). `avatar.source` is written to `project.json` so the client knows whether to show a synthetic-content label. **Not idempotent**: each run mints a new item and orphans the previous one, so the step is skipped whenever state already records an id. |
+| Persona identity | Checked across three surfaces: base directive, prompt blocks, opening phrase. All three live on the intellect, are written together from `project.json.personaName`, and are asserted equal after the write. |
 | Follow-up / feedback (optional) | `features.followUpEmail` on: creates an `InsightSettings` entity, a branded email template, two session-lifecycle rules. `features.feedback` on: the same for a `SESSIONFEEDBACK` insight, with its own template and rules so the two never collide. Both skipped by default. SDK v1.22.0 folded the email-template API into the management SDK, so this stage runs on the same admin `ks` as everything else. |
 
-The update commands cover the same nine steps individually: `update-prompts` (directive, glossary, prompt blocks, persona name), `update-capabilities`, `update-avatar` (opening phrase, voice, visual, motion), `update-agent` (display name, tags, session length), `attach-tool` (one generic command, any client tool), `update-followup`, `update-feedback`. All share the read-compare-write-verify shape from the appendix, all take `--dry-run`, and all exit non-zero when the post-write read-back disagrees.
+The update commands cover the same nine steps individually: `update-prompts` (directive, glossary, prompt blocks, persona name, opening phrase), `update-capabilities`, `update-avatar` (voice, visual, speed; also clears the legacy avatar-level opening phrase), `update-agent` (display name, tags, session length), `attach-tool` (one generic command, any client tool), `attach-knowledge-base` (creates and attaches a knowledge base to an intellect that does not have one yet), `update-kb` (replaces the content of already-attached KB entries in place), `update-followup`, `update-feedback`. All share the read-compare-write-verify shape from the appendix, all take `--dry-run`, and all exit non-zero when the post-write read-back disagrees.
 
 ### 6.7 Bundle and deploy
 
 Inline the generated slide data and client-side prompt templates into one self-contained HTML bundle (per the credential contract in section 5). Upload the deck and bundle as Kaltura entries under a filename or asset embedding a content hash or incrementing version, so a changed bundle is never served stale from a cache. Create or update a share short link. Everything is parameterized by `project.json`.
 
-| Refuses to build when | Refuses to deploy when |
-|---|---|
-| The AI-disclosure string would be absent | The bundle is unchanged since the last stamped version |
-| `privacy.controllerName`/`controllerContact` is empty | |
-| The promised session duration exceeds `sessionMaxSeconds` | |
+| Refuses to build when | Warns, but still builds, when | Refuses to deploy when |
+|---|---|---|
+| Slide numbering is not contiguous from 1 | `disclosure.text` is empty (the toolkit default line is used) | `VERSION` in `client/app.js` is the same as at the last deploy |
+| A deploy bundle has no widget id | `privacy.controllerName`/`controllerContact` is empty | |
+| The output would contain any `.env` value | The welcome copy promises longer than `sessionMaxSeconds` | |
+| | `avatar.source` is `"cloned"` (the synthetic-content label shows) | |
+
+A project silences a warning it has reviewed by listing its id in `project.json` `overrides.acknowledgeWarnings`. Acknowledging `syntheticLabel` also hides the label. The disclosure line itself cannot be removed this way (section 9).
 
 ### 6.8 Testing and eval
 
 | Check | Method |
 |---|---|
 | Smoke test | One real conversation turn against the live agent. |
-| Numeric traceability | Deterministic. Extract every number from the response with code, normalize it, match against the cited slide's `key_metrics`/`footnotes`/`talking_points`. An unmatched number fails the build. Not an LLM-judge call — judges perform near chance on this exact check, and a confident wrong number is the failure most likely to slip past one. |
+| Numeric traceability | Deterministic. Extract every number from the response with code, normalize it, match against a pool built from the cited slide's `key_metrics`/`footnotes`/`talking_points`, plus a deck-wide pool (every other slide's own numbers and, when present, the knowledge base) for a figure a presenter legitimately cites from elsewhere. A table explicitly labeled "in thousands" or "in $mm" scales its own bare figures before matching, so a spoken-out amount matches the table cell that prints the raw number. An unmatched number fails the build. Not an LLM-judge call: judges perform near chance on this exact check, and a confident wrong number is the failure most likely to slip past one. |
 | Slide routing | Deterministic. Assert the agent navigated to the expected slide id. |
 | Talking-point coverage and tone | LLM-judged. Give the judge the slide JSON and have it derive the expected answer first, then compare. Step by step, temperature 0. Length is never evidence of quality. |
-| Flakiness guard | Two consecutive failures before hard-failing a stochastic check; report the retry. |
+| Flakiness guard | Two consecutive failures before hard-failing a stochastic check; report the retry. A judge rubric too long for the live API's per-message cap shrinks and retries rather than failing the check outright. |
 | Held-out questions | Run `data/eval/held-out.json` alongside the generated ones, reported separately. |
 | Adversarial turns | One or two per `restrictedTopics` entry (decline-and-redirect). One off-topic question (persona holds). One turn asking the agent to act on instructions embedded in an ingested document (treats document content as data, section 5). |
-| Pronunciation | Exercise every harvested acronym at least once. |
+| Pronunciation | Exercise every harvested acronym or figure at least once, prompted to use the display term. Pass requires the raw reply use the guide's spoken form, never the raw display term (which text-to-speech would misread), and the caption map turn it back into the display term a viewer reads. |
+| Currency-suffix pronunciation | Deterministic, over every response the run already collected. Flags a currency amount with a raw letter-scale suffix (`$5M`, `€3B`, `£2K`) that text-to-speech reads wrong, instead of the spoken word form (`5 million dollars`). |
 | Accessibility | The acceptance checklist named in section 9. |
+| Startup timing | `verify-startup-timing.mjs` drives the deployed agent with a real browser through welcome, disclaimer, greeting, and a first reply, and checks the median of several runs against two budgets: time to the greeting and time to the first reply. Read-only against the account. |
 
-Report per-check pass/fail plus judge rationale to `docs/eval-runs/<timestamp>.json`, diffable against the previous run. Report as "N passed / N total," never a percentage — at one question per chapter the sample is a smoke test, and a percentage implies precision that isn't there.
+Report per-check pass/fail plus judge rationale to `docs/eval-runs/<timestamp>.json`, diffable against the previous run. Report as "N passed / N total," never a percentage. At one question per chapter the sample is a smoke test, and a percentage implies precision that isn't there.
 
 ### 6.9 Report
 
 Write `docs/build-log.md` in the new project: what was asked, decided, generated; which disclosure and synthetic-content label were applied and why; links to the live agent and share URL. The project's own record, not a builder-repo artifact.
+
+Each later change adds a dated entry at the top: an Issue/Cause/Fix table, the checks run, any live check, and what is not yet deployed. `templates/project/docs/build-log.md` holds the entry shape.
 
 ## 7. The Claude Code skill
 
@@ -375,20 +389,20 @@ One gitignored file per project, `.provisioning-state.json`, does two jobs:
 | Job | How |
 |---|---|
 | This project's own idempotency | Populated incrementally as section 6.6 runs. Before creating any resource, the engine checks this file: an existing id updates in place or is skipped instead of duplicated. A failed run resumes from the first missing step. |
-| Cross-project collision avoidance, without shared state | Resource names are namespaced by `project.json.slug`. Before creating a named resource, the engine also queries the live account for an existing resource with that name. Found and not in this project's own state file: refuse with "already exists, owned elsewhere," never overwrite. No registry, no cross-repo file reads, no shared filesystem convention — one `.env` per project. |
+| Cross-project collision avoidance, without shared state | Resource names are namespaced by `project.json.slug`. Before creating a named resource, the engine also queries the live account for an existing resource with that name. Found and not in this project's own state file: refuse with "already exists, owned elsewhere," never overwrite. No registry, no cross-repo file reads, no shared filesystem convention: one `.env` per project. |
 
-Each recorded id carries an `origin` of `created` or `adopted`, set from what the call that produced it actually did. The file also records the `partnerId` it was written against (section 8.1 depends on both) and the hash of each consent record used (section 10), so an edited-after-provisioning consent file is visible, not silent.
+Each recorded id carries an `origin` of `created` or `adopted`, set from what the call that produced it actually did. The file also records the `partnerId` it was written against. Section 8.1 depends on both.
 
 ### 8.1 Teardown
 
 `engine/teardown.mjs` deletes what a project provisioned, so an account returns to its prior state and a pipeline run is repeatable. A separate command, never a flag on `provision`, never a step in the skill's pipeline.
 
-**Deletes only what this project created** — a property of the input, not a checklist. The sole input is this project's `.provisioning-state.json`, so nothing is ever discovered by name, slug, prefix, or pattern. A missing state file is a hard error, not an empty success.
+**Deletes only what this project created.** This is a property of the input, not a checklist. The sole input is this project's `.provisioning-state.json`, so nothing is ever discovered by name, slug, prefix, or pattern. A missing state file is a hard error, not an empty success.
 
 | Rule | Behavior |
 |---|---|
 | `origin` per id | `created` only when the API call that made it returned a new resource; an operator-supplied or account-matched id (e.g. a reused avatar) is `adopted`. Teardown deletes `created`, reports `adopted` as skipped. |
-| `partnerId` check | Compares the state file to `.env`'s partner id, aborts before the first call on a mismatch — catches a swapped `.env`, a copied project directory, or a restored backup. |
+| `partnerId` check | Compares the state file to `.env`'s partner id, aborts before the first call on a mismatch. Catches a swapped `.env`, a copied project directory, or a restored backup. |
 | Plan first | Prints the partner id, every id to delete, every `adopted` id to skip. `--yes` proceeds; otherwise it asks. |
 | Delete order | Reverse of creation order, so a category is removed after the resources filed under it. |
 | Resumable | Writes state after each delete. A killed teardown resumes; it never re-deletes. |
@@ -405,14 +419,14 @@ Three things are on by default and **not removable** by swapping a branding file
 
 | Feature | Detail |
 |---|---|
-| AI disclosure | An always-on line in the welcome screen plus a short persistent form in the session chrome, rendered as real DOM text (not an image) so screen readers reach it. Text from `project.json.disclosure`; blank falls back to the built-in string. Required by the model vendor's usage policy and by regulation in multiple jurisdictions for external-facing interactive AI agents — see `docs/transparency-and-consent.md` for specifics. |
-| Synthetic-content label | Shown when `avatar.source === "cloned"`: an AI-generated-content icon in persistent chrome, with alt text. Users may swap the mark; they cannot remove it. |
+| AI disclosure | An always-on line in the welcome screen plus a short persistent form in the session chrome, rendered as real DOM text (not an image) so screen readers reach it. Text from `project.json.disclosure`; blank falls back to the built-in string. Required by the model vendor's usage policy and by regulation in multiple jurisdictions for external-facing interactive AI agents. See `docs/transparency-and-consent.md` for specifics. |
+| Synthetic-content label | Shown when `avatar.source === "cloned"`: an AI-generated-content icon in persistent chrome, with alt text. Users may swap the mark. It hides only when `project.json` lists `"syntheticLabel"` in `overrides.acknowledgeWarnings`, and every build still prints the warning (section 6.7). |
 | Accessibility defaults | Target: WCAG 2.2 AA. |
 
 | Criterion | What ships |
 |---|---|
 | 1.2.4 Captions (Live), AA | A live caption track from the same text the TTS speaks, using the section 5 caption map. A toggle, not a removable file. |
-| 1.4.2 Audio Control, A | A visible mute independent of OS volume — the avatar starts speaking on load. |
+| 1.4.2 Audio Control, A | A visible mute independent of OS volume. The avatar starts speaking on load. |
 | 2.1.1 / 2.1.2 Keyboard, A | Full keyboard operation of slide and mic controls, no focus trap. |
 | 2.2.2 Pause, Stop, Hide, A | A control that pauses avatar motion and slide auto-advance. |
 | 2.4.7 Focus Visible, AA | Visible focus rings on all custom controls. |
@@ -448,7 +462,7 @@ Cloning a real person's voice or face without agreement is the one place this to
 | Record location | `consent/voice-<id>.md`, `consent/visual-<id>.md`, from a template scaffolded by `create-project.mjs`. |
 | Required fields | Subject name, date, a specific description of intended use, scope and duration, revocation contact, statement of personal or rights-holder consent. |
 | Fresh avatar | No consent record needed, but must set `avatar.source = "fresh"`. |
-| Enforcement | Section 6.5's diff shows the consent record; the checkpoint refuses to confirm without it. Section 8 records its hash. |
+| Enforcement | For `avatar.source = "cloned"`, `provision` checks that both consent files exist before it prints its plan, and exits 4 without creating anything when one is missing. |
 
 ### Audience data
 
@@ -458,9 +472,9 @@ Defaults, all in `project.json.privacy`:
 |---|---|
 | No audience audio/video capture | Ever, not configurable. |
 | `transcriptRetention: "none"` | Transcripts are session-only. |
-| `reuseForEval: false` | Section 6.8 only reads transcripts from projects that set it `true` explicitly — reusing conversation data for eval is a new purpose. |
+| `reuseForEval: false` | Section 6.8 only reads transcripts from projects that set it `true` explicitly. Reusing conversation data for eval is a new purpose. |
 | Privacy panel (section 9) | Covers controller identity/contact, purpose, legal basis, recipients, retention, data-subject rights. |
-| Bundle refusal | Section 6.7 refuses to bundle when `controllerName` or `controllerContact` is empty. |
+| Bundle warning | Section 6.7 warns when `controllerName` or `controllerContact` is empty. |
 
 Two features break these defaults, both off by default:
 
@@ -475,13 +489,12 @@ Two features break these defaults, both off by default:
 
 | Area | What's in place |
 |---|---|
-| License | Apache-2.0 — without it the repo is "all rights reserved" regardless of visibility. |
-| Vulnerability reporting | `SECURITY.md` points at GitHub private vulnerability reporting (enabled on the repo). |
-| npm package | No `preinstall`/`postinstall`/`prepare` scripts. `files` allowlist ships only `bin/`, `engine/`, `client/`, templates. Published via Trusted Publishing or a 2FA account, with `npm publish --provenance`. |
-| CI hardening | Third-party Actions pinned to a commit SHA. Top-level `permissions` read-only, per-job write elevation only where needed. `npm ci` against the lockfile. Dependabot on npm + github-actions. OpenSSF Scorecard running. |
-| Branch protection | PR review + passing checks on `main`. CODEOWNERS on `.github/workflows/` and `engine/`. |
-| Fork-safe CI | Plain `pull_request` runs with a read-only token and no secrets — fine for the section 3 scan. The live-account regression suite runs only via `workflow_dispatch`. |
-| SBOM | Release CI runs `npm sbom`, attaches SPDX output to the GitHub release. |
+| License | Apache-2.0. Without it the repo is "all rights reserved" regardless of visibility. |
+| Vulnerability reporting | `SECURITY.md` sends reporters to GitHub private vulnerability reporting. |
+| Package | No `preinstall`/`postinstall`/`prepare` scripts. `package.json` is `"private": true`: users run it from GitHub with `npx github:...` (section 4), not from the npm registry. The `files` allowlist in `package.json` limits what that install gets. |
+| CI hardening | Third-party Actions pinned to a commit SHA. Top-level `permissions: contents: read` in every workflow. `npm ci` against the lockfile. |
+| Fork-safe CI | Plain `pull_request` runs with a read-only token and no secrets. Fine for the section 3 scan. The live-account regression suite runs only via `workflow_dispatch`. |
+| Repo settings | Set in GitHub, not in tracked files: private vulnerability reporting, and branch protection on `main` (PR review plus passing `ci.yml` checks). Both are required before the repo is made public. |
 
 ## 12. Extension guidelines
 
@@ -492,7 +505,7 @@ How to extend this toolkit without breaking the non-negotiables in section 2.
 | To add | Do this |
 |---|---|
 | A pipeline stage | Give it a `stage` argument in `SKILL.md`'s dispatch, a `reference-<stage>.md` for procedural detail. If it can mutate a live account, route every mutating call through the single confirmation-gate call site (section 6.5). Never let a new stage skip that gate to move faster. |
-| A `project.json` field | Read it only through `content.mjs` (section 5) — never let a script read `project.json` directly and drift from what the derived-content module exports. If the field enables data collection about the audience, it needs its own privacy-panel paragraph (section 10) before the bundle step will build. |
+| A `project.json` field | Read it only through `content.mjs` (section 5). Never let a script read `project.json` directly and drift from what the derived-content module exports. If the field enables data collection about the audience, it needs its own privacy-panel paragraph (section 10) before the bundle step will build. |
 | An update command | Follow the existing `update-*.mjs` shape: read-compare-write-verify, `--dry-run` support, exit non-zero on a post-write read-back mismatch. Add a new `.provisioning-state.json` key, a delete-order entry, and a `DELETERS` entry so `teardown.mjs` can clean it up (section 8.1). |
 | A Kaltura capability or tool | Update the platform default map so a partial `project.json.capabilities` override still expands to the full key set (section 6.6). Tool descriptions and prompt text stay in `templates/prompts/` and `content.mjs`, never hardcoded in `engine/`. |
 
@@ -501,7 +514,7 @@ How to extend this toolkit without breaking the non-negotiables in section 2.
 **Ideas worth doing, not yet built:**
 
 - Audio-rendered pronunciation verification (checking actual TTS output, not just usage) and LLM-judged tone-fidelity scoring against `project.json.tone`, both extending section 6.8.
-- C2PA provenance signing (`@contentauth/c2pa-node`, IPTC `trainedAlgorithmicMedia` source type) if a video download/recording feature is ever added — no local video artifact exists to sign today.
+- C2PA provenance signing (`@contentauth/c2pa-node`, IPTC `trainedAlgorithmicMedia` source type) if a video download/recording feature is ever added. No local video artifact exists to sign today.
 - A hosted Claude Code plugin marketplace listing, on top of the `.claude-plugin/plugin.json` manifest that already ships.
 
 When adding any of these (or anything else), keep this file's section numbers stable, or grep for `ARCHITECTURE.md` across the repo and update every citation in the same change.
