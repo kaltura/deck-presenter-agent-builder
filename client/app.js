@@ -1282,7 +1282,10 @@ async function startSession() {
   addDebugEntry('startup: presenter.start() called');
   await presenter.start();
   addDebugEntry('startup: presenter.start() resolved');
-  updateSlideUI(1);
+  // The deck is visible before this point, so the visitor may already have
+  // moved it. Show the presenter's slide, not slide 1, or the UI and the
+  // presenter disagree and the next click is a no-op.
+  updateSlideUI(presenter.current);
 
   captions = new CaptionService(session, { replacements: CAPTION_MAP });
   captions.onCaption(({ text, clear }) => {
