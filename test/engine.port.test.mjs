@@ -9,7 +9,7 @@ import { expandedNumberWordForm, buildCaptionMap } from '../engine/lib/caption-m
 import { normalizeServiceUrl } from '../engine/lib/env.mjs';
 import { deleteEntry, deleteShortLink } from '../engine/lib/ovp.mjs';
 import { categoryOwnedElsewhere } from '../engine/lib/tool-guard.mjs';
-import { deleteKbEntries } from '../engine/teardown.mjs';
+import { deleteKbEntries, isAlreadyGone } from '../engine/teardown.mjs';
 import {
   extractNumbers,
   hasUnspokenCurrencySuffix,
@@ -270,4 +270,18 @@ test('deleteKbEntries deletes each entry by id, saves after each, and keeps only
   assert.deepEqual(r.survivors.map((s) => s.id), ['e3']);
   assert.deepEqual(step.value.map((e) => e.entryId), ['e3']);
   assert.deepEqual(saved, [['e2', 'e3'], ['e3']]);
+});
+
+test('isAlreadyGone reads every not-found shape the SDK and api_v3 return', () => {
+  assert.ok(isAlreadyGone({ code: 'agent_not_found', detail: 'Agent with agentId a1 not found for partner 1' }));
+  assert.ok(isAlreadyGone({ code: 'api_exception', title: 'AVATAR_NOT_FOUND', detail: 'Avatar with ID a1 not found for partner 1' }));
+  assert.ok(isAlreadyGone({ code: 'not_found', detail: 'Tool not found' }));
+  assert.ok(isAlreadyGone({ code: 'not_found', detail: 'Not found' }));
+  assert.ok(isAlreadyGone(new Error('baseEntry/delete failed: ENTRY_ID_NOT_FOUND: gone')));
+});
+
+test('isAlreadyGone keeps a server error or a network failure as a real failure', () => {
+  assert.equal(isAlreadyGone({ code: 'server_error', title: 'server error', detail: 'Internal Server Error' }), false);
+  assert.equal(isAlreadyGone(new TypeError('fetch failed')), false);
+  assert.equal(isAlreadyGone(new Error('baseEntry/delete failed: SERVICE_FORBIDDEN: no')), false);
 });

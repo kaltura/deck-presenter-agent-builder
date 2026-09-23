@@ -129,8 +129,7 @@ async function main() {
         try {
           await mgmt.insightSettings.delete(id, ks, CONFIRM);
         } catch (err) {
-          const alreadyGone = /not_found|does not exist|no such/i.test(String(err?.detail || err?.message || err));
-          if (!alreadyGone) throw err;
+          if (!isAlreadyGone(err)) throw err;
         }
         progress(flags, `[${key}] deleted ${insightKey} (${id})`);
       }
@@ -148,8 +147,7 @@ async function main() {
       writeState(projectRoot, state);
       progress(flags, `[${key}] deleted`);
     } catch (err) {
-      const alreadyGone = /not_found|does not exist|no such/i.test(String(err?.detail || err?.message || err));
-      if (alreadyGone) {
+      if (isAlreadyGone(err)) {
         progress(flags, `[${key}] already gone, treating as success`);
         deleted.push({ key, id: step.value, alreadyGone: true });
         delete state.steps[key];
@@ -169,6 +167,15 @@ async function main() {
   }
 }
 
+/** True when a delete failed because the resource no longer exists. The SDK sets `code` to
+ * not_found or *_not_found on a 404, but some services answer with a generic code and put the
+ * signal in `title` (AVATAR_NOT_FOUND) or in prose ("Tool not found"). Raw api_v3 errors carry
+ * codes like ENTRY_ID_NOT_FOUND in the message. */
+export function isAlreadyGone(err) {
+  const text = [err?.code, err?.title, err?.detail, err?.message, typeof err === 'string' ? err : ''].join(' ');
+  return /not[_ ]found|does not exist|no such/i.test(text);
+}
+
 /** Deletes each recorded knowledge entry by its own id. Each deleted or already-gone entry leaves
  * `step.value` and is saved at once, so a killed run resumes with only the entries still left. */
 export async function deleteKbEntries(step, del, save, log) {
@@ -181,7 +188,7 @@ export async function deleteKbEntries(step, del, save, log) {
       log(`deleted ${entry.file} (${entry.entryId})`);
     } catch (err) {
       const reason = String(err?.detail || err?.message || err);
-      if (!/not_found|does not exist|no such/i.test(reason)) {
+      if (!isAlreadyGone(err)) {
         log(`FAILED ${entry.file}: ${reason}`);
         survivors.push({ key: 'kbEntries', id: entry.entryId, reason });
         continue;
