@@ -404,7 +404,7 @@ Each recorded id carries an `origin` of `created` or `adopted`, set from what th
 | `origin` per id | `created` only when the API call that made it returned a new resource; an operator-supplied or account-matched id (e.g. a reused avatar) is `adopted`. Teardown deletes `created`, reports `adopted` as skipped. |
 | `partnerId` check | Compares the state file to `.env`'s partner id, aborts before the first call on a mismatch. Catches a swapped `.env`, a copied project directory, or a restored backup. |
 | Plan first | Prints the partner id, every id to delete, every `adopted` id to skip. `--yes` proceeds; otherwise it asks. |
-| Delete order | Reverse of creation order, so a category is removed after the resources filed under it. |
+| Delete order | Reverse of creation order. Knowledge entries are deleted one by one by their own ids, before the category. A knowledge category has no delete call, so it is always reported as a survivor. |
 | Resumable | Writes state after each delete. A killed teardown resumes; it never re-deletes. |
 | Idempotent | An id already gone counts as success. A second run on a torn-down project makes no call and exits 0. |
 | Reporting | Anything it couldn't delete: id, reason, KMC path to finish by hand. Exit `5` with the state file naming the survivors. |

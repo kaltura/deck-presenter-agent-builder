@@ -10,6 +10,7 @@ input/
 !demo/input/
 !demo/input/**
 *.pdf
+!demo/data/deck.pdf
 *.pptx
 !test/fixtures/sample-deck.pptx
 *.ppt

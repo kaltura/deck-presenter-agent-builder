@@ -15,7 +15,7 @@ import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT,
 import { connect, adminKs } from './lib/kaltura.mjs';
 import { loadContent } from './lib/load-content.mjs';
 import { loadState, newState, recordStep, assertPartnerMatch } from './lib/state.mjs';
-import { assertNamedResourceFree } from './lib/tool-guard.mjs';
+import { assertNamedResourceFree, categoryOwnedElsewhere } from './lib/tool-guard.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -132,9 +132,11 @@ async function main() {
       let categoryId = state.steps.kbCategoryId?.value;
       if (!categoryId) {
         progress(flags, `[kbCategoryId] creating category "${content.KB_NAME}"...`);
-        const cat = await k.findOrCreateCategory({ name: content.KB_NAME }, ks);
+        const existing = await k.findCategory(content.KB_NAME, ks);
+        if (existing) throw new Error(categoryOwnedElsewhere(content.KB_NAME, existing.id));
+        const cat = await k.createCategory({ name: content.KB_NAME }, ks);
         categoryId = cat?.id;
-        if (!categoryId) throw new Error(`knowledge.findOrCreateCategory returned no id: ${JSON.stringify(cat).slice(0, 300)}`);
+        if (!categoryId) throw new Error(`knowledge.createCategory returned no id: ${JSON.stringify(cat).slice(0, 300)}`);
         recordStep(projectRoot, state, 'kbCategoryId', { value: categoryId, origin: 'created' });
       }
       progress(flags, `[kbCategoryId] ${categoryId}`);
