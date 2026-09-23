@@ -35,6 +35,11 @@ export default defineConfig({
           firefoxUserPrefs: {
             'media.navigator.streams.fake': true,
             'media.navigator.permission.disabled': true,
+            // Download the OpenH264 plugin. test/e2e/helpers.mjs waits for it.
+            'media.gmp-manager.updateEnabled': true,
+            'media.gmp-provider.enabled': true,
+            'media.gmp-gmpopenh264.enabled': true,
+            'media.gmp-gmpopenh264.autoupdate': true,
           },
         },
       },

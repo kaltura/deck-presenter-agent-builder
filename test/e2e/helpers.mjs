@@ -25,6 +25,23 @@ export const test = base.extend({
     const lines = timeline.map(({ tMs, text }) => `  ${String(Math.round(tMs)).padStart(6)}ms ${mask(text)}`);
     console.log(`debug timeline for "${testInfo.title}" (${testInfo.project.name}):\n${lines.join('\n') || '  (empty)'}`);
   }, { auto: true }],
+
+  // The avatar server sends only H264 video. Playwright's Linux Firefox gets
+  // H264 from the OpenH264 plugin, which it downloads after launch (the prefs
+  // in playwright.config.mjs turn this on). Without it the session connects
+  // and speaks, but no video frame ever arrives. Waits once per worker.
+  firefoxH264: [async ({ browser, browserName }, use) => {
+    if (browserName === 'firefox') {
+      const page = await browser.newPage();
+      await page.waitForFunction(
+        () => RTCRtpReceiver.getCapabilities('video').codecs.some((c) => /h264/i.test(c.mimeType)),
+        null,
+        { timeout: 120_000, polling: 2_000 },
+      );
+      await page.close();
+    }
+    await use();
+  }, { scope: 'worker', auto: true, timeout: 150_000 }],
 });
 
 export async function startSession(page, query = '') {
