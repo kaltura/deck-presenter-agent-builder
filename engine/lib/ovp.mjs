@@ -69,8 +69,16 @@ export async function updateOrCreateDocumentEntry(ks, entryId, tokenId, name, do
   return { entryId: createResp.id, created: true };
 }
 
+/** api_v3 reports a failure as a 200 response with a KalturaAPIException body. Throw it, so a
+ * failed delete is never counted as a success. The message keeps the code (e.g. ENTRY_ID_NOT_FOUND)
+ * for callers that treat "not found" as already gone. */
+function throwOnApiException(action, resp) {
+  if (resp?.objectType === 'KalturaAPIException') throw new Error(`${action} failed: ${resp.code}: ${resp.message}`);
+  return resp;
+}
+
 export async function deleteEntry(ks, entryId) {
-  return apiForm('baseEntry/action/delete', { ks, entryId });
+  return throwOnApiException('baseEntry/delete', await apiForm('baseEntry/action/delete', { ks, entryId }));
 }
 
 export async function findShortLinkBySystemName(ks, systemName) {
@@ -102,5 +110,5 @@ export async function createShortLink(ks, systemName, fullUrl) {
 }
 
 export async function deleteShortLink(ks, id) {
-  return apiForm('shortlink_shortlink/action/delete', { ks, id });
+  return throwOnApiException('shortlink/delete', await apiForm('shortlink_shortlink/action/delete', { ks, id }));
 }

@@ -97,11 +97,12 @@ When `project.json`'s `features.contactForm` / `features.endSessionTool` are on,
 ### 2. Knowledge base category
 
 ```js
-const cat = await k.findOrCreateCategory({ name: kbCategoryName }, admin.ks);
+if (await k.findCategory(kbCategoryName, admin.ks)) throw new Error('owned elsewhere'); // categoryOwnedElsewhere()
+const cat = await k.createCategory({ name: kbCategoryName }, admin.ks);
 // -> cat.id   (numeric)
 ```
 
-**Idempotent on name.** This is the one step safe to re-run blind. `kbCategoryName` is namespaced by `project.json.slug` (ARCHITECTURE.md 8), so two projects on one account do not land in the same category.
+**Refused on a name match.** The lookup runs only when the state file has no category, so a category with this name belongs to another project or an earlier run whose state was lost. Uploading into it would mix this project's entries into that corpus, so the step stops instead. `kbCategoryName` is namespaced by `project.json.slug` (ARCHITECTURE.md 8), so two projects on one account never share a name. Use these two calls, not the SDK's `findOrCreateCategory`, which adopts a match silently.
 
 ### 3. Upload each KB file
 
@@ -445,7 +446,7 @@ Every field the pipeline writes is reachable from one of these. Do not grow this
 | `update-avatar` | `mgmt.avatars.update({ id, voice, visual })`, plus `openingPhrase: null` to clear the legacy field. An idempotent patch: omitted fields are left alone. |
 | `update-agent` | `mgmt.agents.update({ agentId, displayName, adminTags, maxConversationLength, summaryOverridePrompt })` |
 | `attach-tool` | `mgmt.tools.add` / `mgmt.tools.update` for nav, plus contact/end-session when their feature flag is on, then `mgmt.intellectConfig.setToolIds(configId, toolIds, ks)` to reconcile. Config-only sync never calls `add`. |
-| `attach-knowledge-base` | `mgmt.knowledge.findOrCreateCategory` / `uploadMarkdown` / `addRecord`, then `mgmt.intellectConfig.setKnowledgeIds` and `mgmt.knowledge.setEnabled(configId, true, ks)`. Creates and attaches the knowledge base on a project's first run with `features.knowledgeBase` on, and uploads any new local `data/kb/*.md` file to an already-attached KB. Editing an existing file's content is `update-kb`'s job. |
+| `attach-knowledge-base` | `mgmt.knowledge.findCategory` (refuse on a match) / `createCategory` / `uploadMarkdown` / `addRecord`, then `mgmt.intellectConfig.setKnowledgeIds` and `mgmt.knowledge.setEnabled(configId, true, ks)`. Creates and attaches the knowledge base on a project's first run with `features.knowledgeBase` on, and uploads any new local `data/kb/*.md` file to an already-attached KB. Editing an existing file's content is `update-kb`'s job. |
 | `update-kb` | Diffs each local `data/kb/*.md` file's hash against the hash recorded when it was last uploaded. For a changed file: two `uploadtoken.add` + upload pairs (one for the document entry, one for the markdown asset) followed by `baseentry.updateContent` and `attachment_attachmentasset.setContent`, then polls `mgmt.knowledge.entryStatus` until re-indexed. Same entry ids throughout; refuses a local file with no recorded entry rather than creating one. |
 | `update-followup` | `mgmt.lifecycle.list` / `create` / `match`, plus `mgmt.emailTemplates`. Requests a `FEEDBACK` insight. |
 | `update-feedback` | Same shape as `update-followup`, independent feature flag (`features.feedback`), own insight key `SESSIONFEEDBACK` so both can run without a race on the same `session_ended` event. A template whose `appGuid` has gone stale (agent re-provisioned) is left alone; a fresh one is created instead of updated. |

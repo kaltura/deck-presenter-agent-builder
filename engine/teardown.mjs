@@ -10,6 +10,7 @@ import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT,
 import { connect, adminKs } from './lib/kaltura.mjs';
 import { loadState, writeState, statePath } from './lib/state.mjs';
 import { deleteEntry, deleteShortLink } from './lib/ovp.mjs';
+import { pathToFileURL } from 'node:url';
 
 /** Reverse of creation order: deploy.mjs runs after provision.mjs, so its ids die first. */
 const DELETE_ORDER = [
@@ -97,10 +98,21 @@ async function main() {
   for (const key of created) {
     const step = state.steps[key];
     if (key === 'kbEntries') {
-      // No entry-level delete exists independent of the category; recorded here for visibility only.
-      progress(flags, `[${key}] no per-entry delete call; entries are removed with the category.`);
-      delete state.steps[key];
-      writeState(projectRoot, state);
+      // Each entry is a document entry this project uploaded, so it is deleted by its own id.
+      // The category has no delete call, so it never takes the entries with it.
+      progress(flags, `[${key}] deleting ${step.value.length} knowledge entry(ies)...`);
+      const r = await deleteKbEntries(
+        step,
+        (id) => deleteEntry(ks, id),
+        () => writeState(projectRoot, state),
+        (msg) => progress(flags, `[${key}] ${msg}`),
+      );
+      deleted.push(...r.deleted);
+      survivors.push(...r.survivors);
+      if (!step.value.length) {
+        delete state.steps[key];
+        writeState(projectRoot, state);
+      }
       continue;
     }
     if (key === 'widgetId') {
@@ -117,8 +129,7 @@ async function main() {
         try {
           await mgmt.insightSettings.delete(id, ks, CONFIRM);
         } catch (err) {
-          const alreadyGone = /not_found|does not exist|no such/i.test(String(err?.detail || err?.message || err));
-          if (!alreadyGone) throw err;
+          if (!isAlreadyGone(err)) throw err;
         }
         progress(flags, `[${key}] deleted ${insightKey} (${id})`);
       }
@@ -136,8 +147,7 @@ async function main() {
       writeState(projectRoot, state);
       progress(flags, `[${key}] deleted`);
     } catch (err) {
-      const alreadyGone = /not_found|does not exist|no such/i.test(String(err?.detail || err?.message || err));
-      if (alreadyGone) {
+      if (isAlreadyGone(err)) {
         progress(flags, `[${key}] already gone, treating as success`);
         deleted.push({ key, id: step.value, alreadyGone: true });
         delete state.steps[key];
@@ -157,4 +167,40 @@ async function main() {
   }
 }
 
-runMain(main);
+/** True when a delete failed because the resource no longer exists. The SDK sets `code` to
+ * not_found or *_not_found on a 404, but some services answer with a generic code and put the
+ * signal in `title` (AVATAR_NOT_FOUND) or in prose ("Tool not found"). Raw api_v3 errors carry
+ * codes like ENTRY_ID_NOT_FOUND in the message. */
+export function isAlreadyGone(err) {
+  const text = [err?.code, err?.title, err?.detail, err?.message, typeof err === 'string' ? err : ''].join(' ');
+  return /not[_ ]found|does not exist|no such/i.test(text);
+}
+
+/** Deletes each recorded knowledge entry by its own id. Each deleted or already-gone entry leaves
+ * `step.value` and is saved at once, so a killed run resumes with only the entries still left. */
+export async function deleteKbEntries(step, del, save, log) {
+  const deleted = [];
+  const survivors = [];
+  for (const entry of [...step.value]) {
+    try {
+      await del(entry.entryId);
+      deleted.push({ key: 'kbEntries', id: entry.entryId });
+      log(`deleted ${entry.file} (${entry.entryId})`);
+    } catch (err) {
+      const reason = String(err?.detail || err?.message || err);
+      if (!isAlreadyGone(err)) {
+        log(`FAILED ${entry.file}: ${reason}`);
+        survivors.push({ key: 'kbEntries', id: entry.entryId, reason });
+        continue;
+      }
+      deleted.push({ key: 'kbEntries', id: entry.entryId, alreadyGone: true });
+      log(`${entry.file} already gone, treating as success`);
+    }
+    step.value = step.value.filter((e) => e !== entry);
+    save();
+  }
+  return { deleted, survivors };
+}
+
+// Guarded so tests can import deleteKbEntries without starting a real teardown.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) runMain(main);

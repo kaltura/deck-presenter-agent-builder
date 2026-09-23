@@ -26,6 +26,7 @@ import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT,
 import { connect, adminKs } from './lib/kaltura.mjs';
 import { loadState, recordStep, assertPartnerMatch } from './lib/state.mjs';
 import { loadContent } from './lib/load-content.mjs';
+import { categoryOwnedElsewhere } from './lib/tool-guard.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -74,7 +75,7 @@ async function main() {
   }
 
   const planLines = [`Attach knowledge base for project "${state.slug}" (configId ${configId}):`];
-  planLines.push(`  category "${content.KB_NAME}"${state.steps.kbCategoryId ? ' (already recorded, reused)' : ' (create)'}`);
+  planLines.push(`  category "${content.KB_NAME}"${state.steps.kbCategoryId ? ' (already recorded, reused)' : ' (create, refused if the name is taken)'}`);
   planLines.push(newFiles.length ? `  upload ${newFiles.length} new file(s): ${newFiles.join(', ')}` : '  upload: nothing new');
   planLines.push(`  knowledge record${knowledgeId ? ' (already recorded, reused)' : ' (create)'}`);
   planLines.push('  knowledge_ids and capabilities.use_knowledge_base: attach/enable on the intellect (re-checked live, skipped if already correct)');
@@ -88,9 +89,11 @@ async function main() {
   let categoryId = state.steps.kbCategoryId?.value;
   if (!categoryId) {
     progress(flags, `[kbCategoryId] creating category "${content.KB_NAME}"...`);
-    const cat = await k.findOrCreateCategory({ name: content.KB_NAME }, ks);
+    const existing = await k.findCategory(content.KB_NAME, ks);
+    if (existing) fail(flags, EXIT.PROVISIONING, categoryOwnedElsewhere(content.KB_NAME, existing.id));
+    const cat = await k.createCategory({ name: content.KB_NAME }, ks);
     categoryId = cat?.id;
-    if (!categoryId) fail(flags, EXIT.PROVISIONING, `knowledge.findOrCreateCategory returned no id: ${JSON.stringify(cat).slice(0, 300)}`);
+    if (!categoryId) fail(flags, EXIT.PROVISIONING, `knowledge.createCategory returned no id: ${JSON.stringify(cat).slice(0, 300)}`);
     recordStep(projectRoot, state, 'kbCategoryId', { value: categoryId, origin: 'created' });
   }
   progress(flags, `[kbCategoryId] ${categoryId}`);

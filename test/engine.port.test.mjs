@@ -7,6 +7,9 @@ import { normalizeToolConfig, stableStringify, eqToolConfig } from '../engine/at
 import { inlineSvgAssets } from '../engine/bundle.mjs';
 import { expandedNumberWordForm, buildCaptionMap } from '../engine/lib/caption-map.mjs';
 import { normalizeServiceUrl } from '../engine/lib/env.mjs';
+import { deleteEntry, deleteShortLink } from '../engine/lib/ovp.mjs';
+import { categoryOwnedElsewhere } from '../engine/lib/tool-guard.mjs';
+import { deleteKbEntries, isAlreadyGone } from '../engine/teardown.mjs';
 import {
   extractNumbers,
   hasUnspokenCurrencySuffix,
@@ -220,4 +223,65 @@ test('the pronunciation probe names the term without asking for its printed form
   const q = pronunciationProbe('Lumen');
   assert.match(q, /Lumen/);
   assert.doesNotMatch(q, /"Lumen"|use the term/i);
+});
+
+// ── ovp.mjs deletes, tool-guard.mjs category guard, teardown.mjs knowledge entries ──
+
+async function withFetchBody(body, fn) {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify(body), { status: 200 });
+  try { return await fn(); } finally { globalThis.fetch = real; }
+}
+
+test('deleteEntry and deleteShortLink throw on a 200 KalturaAPIException body and keep its code', async () => {
+  const body = { objectType: 'KalturaAPIException', code: 'ENTRY_ID_NOT_FOUND', message: 'Entry id "x" not found' };
+  await withFetchBody(body, async () => {
+    await assert.rejects(deleteEntry('ks', 'x'), /ENTRY_ID_NOT_FOUND/);
+    await assert.rejects(deleteShortLink('ks', 'x'), /ENTRY_ID_NOT_FOUND/);
+  });
+});
+
+test('deleteEntry resolves on a success body', async () => {
+  await withFetchBody(null, async () => {
+    assert.equal(await deleteEntry('ks', 'x'), null);
+  });
+});
+
+test('categoryOwnedElsewhere names the category and refuses to adopt it', () => {
+  const msg = categoryOwnedElsewhere('Wren KB', 42);
+  assert.match(msg, /Knowledge category "Wren KB"/);
+  assert.match(msg, /id 42/);
+  assert.match(msg, /Refusing/);
+});
+
+test('deleteKbEntries deletes each entry by id, saves after each, and keeps only real failures', async () => {
+  const step = { value: [
+    { file: 'a.md', entryId: 'e1' },
+    { file: 'b.md', entryId: 'e2' },
+    { file: 'c.md', entryId: 'e3' },
+  ] };
+  const saved = [];
+  const del = async (id) => {
+    if (id === 'e2') throw new Error('baseEntry/delete failed: ENTRY_ID_NOT_FOUND: gone');
+    if (id === 'e3') throw new Error('baseEntry/delete failed: SERVICE_FORBIDDEN: no');
+  };
+  const r = await deleteKbEntries(step, del, () => saved.push(step.value.map((e) => e.entryId)), () => {});
+  assert.deepEqual(r.deleted.map((d) => [d.id, !!d.alreadyGone]), [['e1', false], ['e2', true]]);
+  assert.deepEqual(r.survivors.map((s) => s.id), ['e3']);
+  assert.deepEqual(step.value.map((e) => e.entryId), ['e3']);
+  assert.deepEqual(saved, [['e2', 'e3'], ['e3']]);
+});
+
+test('isAlreadyGone reads every not-found shape the SDK and api_v3 return', () => {
+  assert.ok(isAlreadyGone({ code: 'agent_not_found', detail: 'Agent with agentId a1 not found for partner 1' }));
+  assert.ok(isAlreadyGone({ code: 'api_exception', title: 'AVATAR_NOT_FOUND', detail: 'Avatar with ID a1 not found for partner 1' }));
+  assert.ok(isAlreadyGone({ code: 'not_found', detail: 'Tool not found' }));
+  assert.ok(isAlreadyGone({ code: 'not_found', detail: 'Not found' }));
+  assert.ok(isAlreadyGone(new Error('baseEntry/delete failed: ENTRY_ID_NOT_FOUND: gone')));
+});
+
+test('isAlreadyGone keeps a server error or a network failure as a real failure', () => {
+  assert.equal(isAlreadyGone({ code: 'server_error', title: 'server error', detail: 'Internal Server Error' }), false);
+  assert.equal(isAlreadyGone(new TypeError('fetch failed')), false);
+  assert.equal(isAlreadyGone(new Error('baseEntry/delete failed: SERVICE_FORBIDDEN: no')), false);
 });
