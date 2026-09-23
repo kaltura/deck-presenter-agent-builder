@@ -14,7 +14,7 @@ import { autoPlayBlocked, STAY_HERE_PHRASE_RE } from './autoplay-state.js';
 const PARTNER_ID = 0;
 const WIDGET_ID = 'WIDGET_ID_UNSET';
 const PDF_URL = './data/deck.pdf';
-const VERSION = '0.1.20';
+const VERSION = '0.1.21';
 const SDK_VERSION = '0.0.0';
 
 const AUTO_PLAY_DELAY_MS = 10000;
