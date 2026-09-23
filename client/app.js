@@ -279,6 +279,8 @@ const REPLY_PENDING_MAX_MS = 20000;
 // Mirrors the session's own responsePending/responseSettled events, for the
 // autoplay gate and the avatar pip's pending cue.
 let responsePending = false;
+// The last "autoplay held" debug entry, so a repeated hold logs once.
+let lastAutoPlayHeld = '';
 let memoryCleared = false;
 let lastAvatarTextEndedWithQuestion = false;
 let pdfDoc = null;
@@ -876,11 +878,10 @@ function cancelAutoPlay() {
 }
 function scheduleAutoPlay(delay = AUTO_PLAY_DELAY_MS) {
   cancelAutoPlay();
-  const blockers = autoPlayBlockers(autoPlaySnapshot());
-  if (blockers.length) {
-    addDebugEntry(`autoplay held: ${blockers.join(', ')}`);
-    return;
-  }
+  const held = autoPlayBlockers(autoPlaySnapshot()).join(', ');
+  if (held !== lastAutoPlayHeld && held) addDebugEntry(`autoplay held: ${held}`);
+  lastAutoPlayHeld = held;
+  if (held) return;
   const wait = visitorInQnA || lastAvatarTextEndedWithQuestion ? AUTO_PLAY_AFTER_QUESTION_MS : delay;
   showCountdown(wait);
   autoPlayTimer = setTimeout(() => {
@@ -892,12 +893,15 @@ function scheduleAutoPlay(delay = AUTO_PLAY_DELAY_MS) {
 // Local mic voice activity: held while the visitor is plainly still talking, and
 // released VISITOR_SILENCE_MS after the mic goes quiet. Capped by
 // VISITOR_SPEAKING_MAX_MS so steady background noise can't hold autoplay forever.
+// A hold that ends on its own timer reschedules autoplay: the avatar may have
+// stopped talking while it held, and nothing else would start the countdown.
 function releaseVoiceHold() {
   clearTimeout(visitorSilenceTimer);
   clearTimeout(visitorSpeakingMaxTimer);
   visitorSilenceTimer = null;
   visitorSpeakingMaxTimer = null;
   visitorSpeaking = false;
+  scheduleAutoPlay();
 }
 function onLocalVoice(speaking) {
   if (speaking) {
@@ -920,7 +924,7 @@ function holdForReply() {
   replyPending = true;
   cancelAutoPlay();
   clearTimeout(replyPendingTimer);
-  replyPendingTimer = setTimeout(releaseReplyHold, REPLY_PENDING_MAX_MS);
+  replyPendingTimer = setTimeout(() => { releaseReplyHold(); scheduleAutoPlay(); }, REPLY_PENDING_MAX_MS);
 }
 function releaseReplyHold() {
   clearTimeout(replyPendingTimer);
