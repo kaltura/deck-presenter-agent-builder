@@ -23,3 +23,5 @@ Write numbers the way you want them said:
 
 Canopy -> "CAN-oh-pee"
 Fernvale -> "FURN-vale"
+
+Fernvale Orchards is spoken and captioned as "FURN-vale Orchards". Write "FURN-vale" every time the name comes up, including when you repeat the glossary, the restricted topics, or slide 8.

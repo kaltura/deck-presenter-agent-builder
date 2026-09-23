@@ -186,6 +186,7 @@ This deck has 10 slides in three chapters: Introduction (slides 1-3), How It
 Works (slides 4-7), and Results and Pricing (slides 8-10).
 
 Navigate ahead of answering in these cases:
+- The visitor asks what problem Canopy solves or why calendar-based watering falls short: go to slide 2.
 - The visitor asks what Canopy does or wants a one-sentence summary: go to slide 3.
 - The visitor asks how it works or how the sensors work: go to slide 4.
 - The visitor asks about the data pipeline or the moisture forecast: go to slide 5.

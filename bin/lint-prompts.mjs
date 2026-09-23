@@ -13,6 +13,8 @@
  *   4. The identity-and-disclosure skeleton (everything in base-directive.md before
  *      "# DECK-SPECIFIC PRESENTING RULES") matches templates/prompts/base-directive.md
  *      byte for byte. That section is copied, never drafted per project.
+ *   5. Every goToSlide in data/nav-rules.json is cited in the deck-specific section,
+ *      so the routing data and the directive prose cannot drift apart.
  *
  * Two rules from reference-prompts.md are reported as heuristic warnings, not hard
  * failures: proof-point citations pointing at a slide with real key_metrics, and
@@ -88,10 +90,20 @@ async function main() {
     const directiveText = readFileSync(directivePath, 'utf8');
     const deckSpecificIdx = directiveText.indexOf('# DECK-SPECIFIC PRESENTING RULES');
     const deckSpecific = deckSpecificIdx === -1 ? '' : directiveText.slice(deckSpecificIdx);
+    const cited = new Set();
     for (const match of deckSpecific.matchAll(/\bslide (\d+)\b/gi)) {
       const n = Number(match[1]);
+      cited.add(n);
       if (!validSlides.has(n)) errors.push(`base-directive.md deck-specific section cites slide ${n}, which does not exist in data/slides/.`);
       else if (chapters.length && !inAnyChapterRange(n, chapters)) errors.push(`base-directive.md deck-specific section cites slide ${n}, which falls outside every chapter range in project.json.`);
+    }
+
+    // ── Rule 5: every nav rule's slide is rendered into the deck-specific section ──
+    const navRulesPath = resolve(projectRoot, 'data/nav-rules.json');
+    if (existsSync(navRulesPath)) {
+      for (const rule of JSON.parse(readFileSync(navRulesPath, 'utf8')).rules || []) {
+        if (!cited.has(rule.goToSlide)) errors.push(`data/nav-rules.json sends "${rule.when}" to slide ${rule.goToSlide}, but base-directive.md's deck-specific section never cites slide ${rule.goToSlide}. Re-render the section from data/nav-rules.json.`);
+      }
     }
 
     // ── Rule 4: fixed skeleton must match the template byte for byte ──

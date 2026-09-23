@@ -12,6 +12,8 @@ import { tmpdir } from 'node:os';
 const ROOT = resolve(import.meta.dirname, '..');
 const FIXTURE = resolve(ROOT, 'fixtures/smoke-project');
 const SKELETON_MARKER = '# DECK-SPECIFIC PRESENTING RULES';
+// Cites every slide the fixture's data/nav-rules.json routes to, so rule 5 stays quiet.
+const NAV_CITES = 'Present slide 2 as the architecture and slide 3 as pricing.';
 
 function run(args) {
   const r = spawnSync('node', [resolve(ROOT, 'bin/lint-prompts.mjs'), ...args], { cwd: ROOT, encoding: 'utf8' });
@@ -135,7 +137,7 @@ test('lint-prompts errors when a kb file sourceSlides falls outside its stated c
 test('lint-prompts warns on a bare negative directive with no stated alternative', () => {
   const dir = tempProject();
   try {
-    setDeckSpecific(dir, 'Never mention the discontinued model.');
+    setDeckSpecific(dir, `Never mention the discontinued model. ${NAV_CITES}`);
     const { code, stdout } = run(['--project', dir, '--json']);
     const out = JSON.parse(stdout);
     assert.equal(code, 0);
@@ -149,12 +151,25 @@ test('lint-prompts warns on a bare negative directive with no stated alternative
 test('lint-prompts warns on a proof-point citation to a slide with no key_metrics', () => {
   const dir = tempProject();
   try {
-    setDeckSpecific(dir, 'Cite the case study result on slide 1 when asked for proof.');
+    setDeckSpecific(dir, `Cite the case study result on slide 1 when asked for proof. ${NAV_CITES}`);
     const { code, stdout } = run(['--project', dir, '--json']);
     const out = JSON.parse(stdout);
     assert.equal(code, 0);
     assert.equal(out.ok, true);
     assert.match(out.warnings.join('\n'), /Possible proof-point citation to slide 1, which has no key_metrics/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('lint-prompts errors when a nav rule slide is missing from the deck-specific section', () => {
+  const dir = tempProject();
+  try {
+    setDeckSpecific(dir, 'Present slide 1 as the overview and slide 3 as pricing.');
+    const { code, stdout } = run(['--project', dir, '--json']);
+    const out = JSON.parse(stdout);
+    assert.equal(code, 4);
+    assert.match(out.errors.join('\n'), /sends "the visitor asks how it works" to slide 2, but base-directive\.md's deck-specific section never cites slide 2\./);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
