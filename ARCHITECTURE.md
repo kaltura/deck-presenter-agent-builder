@@ -103,10 +103,14 @@ deck-presenter-agent-builder/          (public, generic, this repo)
 ├── .github/workflows/                  nightly eval and startup-timing checks against the live agent, off until
 │                                       repo secrets/variables are set (scaffolded, opt-in)
 └── docs/
-    ├── build-log.md                    what was generated, what was asked, what was decided
     ├── eval-runs/<timestamp>.json      per-run eval results, diffable across rebuilds
     └── timing-runs/<timestamp>.json    per-run startup-timing results from verify-startup-timing.mjs
 ```
+
+The report stage (section 6.9) tags a release instead of writing a doc file: an
+annotated git tag, `git tag -a vX.Y.Z -m "<notes>"`, or `gh release create` when
+the project has a GitHub remote. A tag is a permanent, versioned record with no
+separate file to keep in sync, and it works with no CI or remote at all.
 
 ## 4. End-to-end experience
 
@@ -120,11 +124,11 @@ Prerequisites: **Node 22+** and Claude Code. `doctor.mjs` checks the Node versio
 | Step | What happens |
 |---|---|
 | Validate | One cheap authenticated call checks the Kaltura account and `.env`, before spending effort on the deck. |
-| Parse | Reads the deck and notes. Asks one batched, capped round of clarifying questions (persona name, tone, audience, restricted topics, plus the highest-risk content gaps). Anything past the cap gets a best-guess default plus a TODO in `docs/build-log.md`. |
+| Parse | Reads the deck and notes. Asks one batched, capped round of clarifying questions (persona name, tone, audience, restricted topics, plus the highest-risk content gaps). Anything past the cap gets a best-guess default, carried forward to the report stage's release notes. |
 | Draft | Writes prompts and the knowledge base. |
 | Checkpoint | Shows a summary and a dry-run diff (generated content, plus the exact sequence of Kaltura operations) before touching any live account. |
 | Confirm | Provisions, bundles, deploys, runs smoke tests and a per-chapter Q&A eval. |
-| Report | A share link and a build log. |
+| Report | A share link and a tagged release. |
 
 5. Later edits ("make it more casual", "the deck changed") are incremental re-runs of one pipeline stage. Any stage that reaches a mutating call still shows a diff and asks for confirmation.
 
@@ -269,7 +273,7 @@ All ingestion intermediates (rendered slide-page images, extracted PPTX XML) are
 | 6.6 Provisioning | Live Kaltura resources | `.provisioning-state.json` |
 | 6.7 Bundle/deploy | Deployed HTML bundle | share link |
 | 6.8 Test/eval | Pass/fail report | `docs/eval-runs/<timestamp>.json` |
-| 6.9 Report | Build log | `docs/build-log.md` |
+| 6.9 Report | Release notes | git tag / GitHub release |
 
 ### 6.1 Deck + notes ingestion
 
@@ -369,9 +373,35 @@ Report per-check pass/fail plus judge rationale to `docs/eval-runs/<timestamp>.j
 
 ### 6.9 Report
 
-Write `docs/build-log.md` in the new project: what was asked, decided, generated; which disclosure and synthetic-content label were applied and why; links to the live agent and share URL. The project's own record, not a builder-repo artifact.
+Tag a release in the new project: `git tag -a vX.Y.Z -m "<notes>"`, and
+`gh release create vX.Y.Z --notes-file <path>` when the project has a GitHub
+remote. The notes cover what was asked, decided, generated; which disclosure
+and synthetic-content label were applied and why; links to the live agent and
+share URL. The project's own record, not a builder-repo artifact.
 
-Each later change adds a dated entry at the top: an Issue/Cause/Fix table, the checks run, any live check, and what is not yet deployed. `templates/project/docs/build-log.md` holds the entry shape.
+Each later change tags a new version, with notes in the same shape:
+
+```markdown
+## vX.Y.Z, short summary of the change
+
+| Issue | Cause | Fix |
+|---|---|---|
+| What the visitor or eval saw | Why it happened | What changed, with file paths |
+
+Checked:
+- `npm test`, the eval run file, or another command and what it showed
+
+| Live check | Result |
+|---|---|
+| What you checked on the deployed agent | What happened |
+
+Not yet deployed:
+- Changes pushed to the account config but not in the live bundle, or "none"
+```
+
+Leave out the live check table when nothing was checked live. A git tag (or a
+GitHub release built from one) is already a permanent, versioned record tied
+to a commit, so there is no separate log file to keep in sync with it.
 
 ## 7. The Claude Code skill
 

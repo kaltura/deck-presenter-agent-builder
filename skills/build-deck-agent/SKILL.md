@@ -59,7 +59,7 @@ Load `reference-prompts.md` now. In order:
 Load `reference-eval.md`'s "held-out questions" section for what to collect here, and the confirmation-gate description in this project's `CLAUDE.md`.
 
 1. Show the human: generated prompts (diff against the previous version if one exists), the KB file list, slide count and chapter map, any consent record needed for a cloned voice or visual, and the concrete sequence of planned provisioning operations (dry-run output of `scripts/provision.mjs --project . --dry-run`).
-2. Present the batched question list accumulated across **ingest**, **terms**, and **prompts** (persona name, tone, target audience, restricted topics, plus up to the ten highest-risk gaps). Anything beyond ten, or left unanswered, gets a best-guess default plus a `docs/build-log.md` TODO entry. Never turn this into an open-ended back-and-forth.
+2. Present the batched question list accumulated across **ingest**, **terms**, and **prompts** (persona name, tone, target audience, restricted topics, plus up to the ten highest-risk gaps). Anything beyond ten, or left unanswered, gets a best-guess default, carried forward to the report stage's release notes. Never turn this into an open-ended back-and-forth.
 3. Ask for 2 to 3 held-out questions per chapter, phrased the way a real audience would ask, and write them to `data/eval/held-out.json`. These are reused by every later **test** run.
 4. Require explicit confirmation before moving on to **provision**.
 
@@ -92,6 +92,6 @@ Also run `node scripts/verify-startup-timing.mjs --project .` against the deploy
 
 ## Stage: report
 
-Write or update `docs/build-log.md`: what was asked, what was decided (including every best-guess default from **checkpoint**'s ten-item cap), what was generated, which disclosure and synthetic-content label were applied and why, the live agent's share URL, and a link to the latest `docs/eval-runs/` file. This is the project's own record, not something that goes back into the deck-presenter-agent-builder toolkit repo.
+Tag a release: `git tag -a vX.Y.Z -m "<notes>"`, and `gh release create vX.Y.Z --notes-file <path>` when the project has a GitHub remote. The notes cover what was asked, what was decided (including every best-guess default from **checkpoint**'s ten-item cap), what was generated, which disclosure and synthetic-content label were applied and why, the live agent's share URL, and a link to the latest `docs/eval-runs/` file. This is the project's own record, not something that goes back into the deck-presenter-agent-builder toolkit repo.
 
-Add each later change as a new entry at the top, in the shape `templates/project/docs/build-log.md` shows: a dated heading with the version, an Issue/Cause/Fix table, a Checked list naming the commands run and what they showed, a live check table when something was checked on the deployed agent, and a Not yet deployed list.
+Tag each later change as a new version, in the shape ARCHITECTURE.md 6.9 shows: a dated heading with the version, an Issue/Cause/Fix table, a Checked list naming the commands run and what they showed, a live check table when something was checked on the deployed agent, and a Not yet deployed list.

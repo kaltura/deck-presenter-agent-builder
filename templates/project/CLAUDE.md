@@ -29,7 +29,6 @@ start it, or `/build-deck-agent <stage>` to re-run one stage (e.g. `prompts` aft
 | `scripts/` | The engine commands (`provision`, `bundle`, `deploy`, `verify`, `update-*`, `teardown`), parameterized by `project.json` + `.env`. |
 | `consent/` | Voice/visual clone consent records. With `avatar.source: "cloned"`, `provision` refuses before creating anything unless both exist. |
 | `doctor.mjs` | Read-only preflight: Node version, `.env`, one authenticated call. Run `node doctor.mjs --project .` first when anything fails. |
-| `docs/build-log.md` | This project's own record of what was built and why. |
 | `docs/eval-runs/<timestamp>.json` | Per-run eval results, diffable across rebuilds. |
 | `docs/timing-runs/` | Startup-timing results from `scripts/verify-startup-timing.mjs`. |
 | `.github/workflows/` | Nightly eval and startup-timing runs. Off until the secrets and variables in `README.md` are set. |
@@ -43,8 +42,8 @@ real people. Never copy a visitor transcript, name, or contact detail into any
 file here, even for debugging. `project.json.privacy` controls what the deployed
 agent retains, and the default is nothing.
 A debug log or transcript from a real session is audience data too. Read it,
-describe the finding in `docs/build-log.md` in your own words, and keep the log
-itself out of the repo.
+describe the finding in your own words in the commit message of the fix, and
+keep the log itself out of the repo.
 
 **Mutating a live account asks first.** Every `scripts/` command that can create,
 update, or delete a Kaltura resource prints its plan and asks for confirmation
