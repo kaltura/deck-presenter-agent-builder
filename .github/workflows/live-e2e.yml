@@ -30,18 +30,18 @@ jobs:
 
       # The bundle needs only the maintained demo's widget id, and it changes
       # only when the demo is re-provisioned. It comes from the DEMO_WIDGET_ID
-      # repo variable, and this step fails fast if the widget no longer opens
+      # secret (a secret, not a variable, so the runner masks it in every log
+      # line), and this step fails fast if the widget no longer opens
       # a session, so a stale id never looks like a client bug. It makes the
       # same two read-only calls the browser makes (startWidgetSession, then
-      # appInit). To set or refresh the variable from the local state file:
-      #   gh variable set DEMO_WIDGET_ID --body "$(node -p "require('./demo/.provisioning-state.json').steps.widgetId.value")"
+      # appInit). To set or refresh the secret from the local state file:
+      #   gh secret set DEMO_WIDGET_ID --body "$(node -p "require('./demo/.provisioning-state.json').steps.widgetId.value")"
       - name: Check the demo widget id is live
         run: |
           if [ -z "$DEMO_WIDGET_ID" ]; then
-            echo "::error::Set the DEMO_WIDGET_ID repo variable to the demo project's widget id."
+            echo "::error::Set the DEMO_WIDGET_ID secret to the demo project's widget id."
             exit 3
           fi
-          echo "::add-mask::$DEMO_WIDGET_ID"
           node --input-type=module -e "
             import { Management } from '@kaltura/intelligent-agents/management';
             const k = new Management({ partnerId: Number(process.env.KALTURA_PARTNER_ID) });
@@ -49,19 +49,19 @@ jobs:
               const token = await k.sessions.createWidgetToken({ widgetId: process.env.DEMO_WIDGET_ID });
               await k.application.appInit(token.ks);
             } catch (err) {
-              console.error('::error::DEMO_WIDGET_ID does not open a session (' + (err.code || err.message) + '). The demo was probably re-provisioned. Refresh the variable from demo/.provisioning-state.json.');
+              console.error('::error::DEMO_WIDGET_ID does not open a session (' + (err.code || err.message) + '). The demo was probably re-provisioned. Refresh the secret from demo/.provisioning-state.json.');
               process.exit(3);
             }
           "
         env:
-          DEMO_WIDGET_ID: ${{ vars.DEMO_WIDGET_ID }}
+          DEMO_WIDGET_ID: ${{ secrets.DEMO_WIDGET_ID }}
           KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
 
       # dist.html is gitignored, so CI must rebuild it before serving it.
       - name: Bundle the demo client
         run: node engine/bundle.mjs --project demo --widget-id="$DEMO_WIDGET_ID"
         env:
-          DEMO_WIDGET_ID: ${{ vars.DEMO_WIDGET_ID }}
+          DEMO_WIDGET_ID: ${{ secrets.DEMO_WIDGET_ID }}
           KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
           KALTURA_ADMIN_SECRET: ${{ secrets.KALTURA_ADMIN_SECRET }}
 
