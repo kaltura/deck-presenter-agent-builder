@@ -5,7 +5,7 @@ import { isWithinCooldown } from '../client/nav-cooldown.js';
 import { navAckPayload } from '../client/nav-ack.js';
 import { levelAt, statsSummary } from '../client/mic-stats.js';
 import { peekResumeSlide, PRESENTER_MEMORY_KEY } from '../client/presenter-memory.js';
-import { autoPlayBlocked, STAY_HERE_PHRASE_RE } from '../client/autoplay-state.js';
+import { autoPlayBlocked, autoPlayBlockers, STAY_HERE_PHRASE_RE } from '../client/autoplay-state.js';
 
 function fakeStorage(record) {
   const raw = record === undefined ? null : JSON.stringify(record);
@@ -158,6 +158,12 @@ test('autoPlayBlocked is true when any single hold flag is set', () => {
   for (const flag of ['heldAfterBack', 'isPaused', 'sessionEnded', 'deckPausedAfterGoodbye', 'visitorSpeaking', 'replyPending', 'typing', 'avatarSpeaking', 'sessionSpeaking', 'responsePending']) {
     assert.equal(autoPlayBlocked({ ...base, [flag]: true }), true, `expected blocked when ${flag} is true`);
   }
+});
+
+test('autoPlayBlockers names each gate that blocks', () => {
+  const base = { sessionRevealed: true, openingDone: true, deckPresenting: true, autoPlayEnabled: true };
+  assert.deepEqual(autoPlayBlockers(base), []);
+  assert.deepEqual(autoPlayBlockers({ ...base, openingDone: false, visitorSpeaking: true }), ['!openingDone', 'visitorSpeaking']);
 });
 
 test('STAY_HERE_PHRASE_RE matches common generic stay-here phrasing', () => {

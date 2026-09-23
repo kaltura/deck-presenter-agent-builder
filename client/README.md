@@ -16,7 +16,7 @@ Everything lives in `app.js`, a single module with no build step of its own (`bu
 
 | Behavior | Rule |
 |---|---|
-| Autoplay countdown | Scheduled from `turnEnd` and `avatarStopTalking`, never from `responseSettled` (a nav tool call settles a response before the avatar speaks). Each schedule and each timer fire first checks the pure `autoPlayBlocked(snapshot)` in `autoplay-state.js`. `avatarStartTalking` cancels it, and `interrupted` clears the speaking flag, since it ends speech without an `avatarStopTalking`. |
+| Autoplay countdown | Scheduled from `turnEnd` and `avatarStopTalking`, never from `responseSettled` (a nav tool call settles a response before the avatar speaks). Also rescheduled when the local voice hold or the reply hold ends on its own timer, since the avatar may have stopped talking while it held. Each schedule and each timer fire first checks the pure `autoPlayBlocked(snapshot)` in `autoplay-state.js`. A blocked schedule logs the blocking gates (`autoplay held: ...`) to the debug timeline. `avatarStartTalking` cancels it, and `interrupted` clears the speaking flag, since it ends speech without an `avatarStopTalking`. |
 | Goodbye | `handleGoodbye()` pauses the deck and starts a `GOODBYE_GRACE_MS` timer that disconnects and shows the session-ended screen. Any slide change, or a new visitor turn that is not a goodbye, cancels it. An end-session tool call is ignored when the visitor navigated after their last message, so a late call cannot end a session the visitor re-engaged. |
 | Nav nudge | Sent after each slide change (a click, a PDF link, autoplay). Skipped for `reason: 'avatar'` and `'resume'`, because the nav ack already carries the slide content and a nudge would cut off the answer in progress. |
 

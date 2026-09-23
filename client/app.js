@@ -8,7 +8,7 @@ import { isWithinCooldown } from './nav-cooldown.js';
 import { levelAt, statsSummary } from './mic-stats.js';
 import { navAckPayload } from './nav-ack.js';
 import { peekResumeSlide } from './presenter-memory.js';
-import { autoPlayBlocked, STAY_HERE_PHRASE_RE } from './autoplay-state.js';
+import { autoPlayBlocked, autoPlayBlockers, STAY_HERE_PHRASE_RE } from './autoplay-state.js';
 
 // ── Config (bundle.mjs rewrites these four before esbuild runs) ──
 const PARTNER_ID = 0;
@@ -279,6 +279,8 @@ const REPLY_PENDING_MAX_MS = 20000;
 // Mirrors the session's own responsePending/responseSettled events, for the
 // autoplay gate and the avatar pip's pending cue.
 let responsePending = false;
+// The last "autoplay held" debug entry, so a repeated hold logs once.
+let lastAutoPlayHeld = '';
 let memoryCleared = false;
 let lastAvatarTextEndedWithQuestion = false;
 let pdfDoc = null;
@@ -876,7 +878,10 @@ function cancelAutoPlay() {
 }
 function scheduleAutoPlay(delay = AUTO_PLAY_DELAY_MS) {
   cancelAutoPlay();
-  if (autoPlayBlocked(autoPlaySnapshot())) return;
+  const held = autoPlayBlockers(autoPlaySnapshot()).join(', ');
+  if (held !== lastAutoPlayHeld && held) addDebugEntry(`autoplay held: ${held}`);
+  lastAutoPlayHeld = held;
+  if (held) return;
   const wait = visitorInQnA || lastAvatarTextEndedWithQuestion ? AUTO_PLAY_AFTER_QUESTION_MS : delay;
   showCountdown(wait);
   autoPlayTimer = setTimeout(() => {
@@ -888,12 +893,15 @@ function scheduleAutoPlay(delay = AUTO_PLAY_DELAY_MS) {
 // Local mic voice activity: held while the visitor is plainly still talking, and
 // released VISITOR_SILENCE_MS after the mic goes quiet. Capped by
 // VISITOR_SPEAKING_MAX_MS so steady background noise can't hold autoplay forever.
+// A hold that ends on its own timer reschedules autoplay: the avatar may have
+// stopped talking while it held, and nothing else would start the countdown.
 function releaseVoiceHold() {
   clearTimeout(visitorSilenceTimer);
   clearTimeout(visitorSpeakingMaxTimer);
   visitorSilenceTimer = null;
   visitorSpeakingMaxTimer = null;
   visitorSpeaking = false;
+  scheduleAutoPlay();
 }
 function onLocalVoice(speaking) {
   if (speaking) {
@@ -916,7 +924,7 @@ function holdForReply() {
   replyPending = true;
   cancelAutoPlay();
   clearTimeout(replyPendingTimer);
-  replyPendingTimer = setTimeout(releaseReplyHold, REPLY_PENDING_MAX_MS);
+  replyPendingTimer = setTimeout(() => { releaseReplyHold(); scheduleAutoPlay(); }, REPLY_PENDING_MAX_MS);
 }
 function releaseReplyHold() {
   clearTimeout(replyPendingTimer);
@@ -1274,7 +1282,10 @@ async function startSession() {
   addDebugEntry('startup: presenter.start() called');
   await presenter.start();
   addDebugEntry('startup: presenter.start() resolved');
-  updateSlideUI(1);
+  // The deck is visible before this point, so the visitor may already have
+  // moved it. Show the presenter's slide, not slide 1, or the UI and the
+  // presenter disagree and the next click is a no-op.
+  updateSlideUI(presenter.current);
 
   captions = new CaptionService(session, { replacements: CAPTION_MAP });
   captions.onCaption(({ text, clear }) => {
