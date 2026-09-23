@@ -1,5 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { startSession, waitForLiveSession } from './helpers.mjs';
+import { test, expect, startSession, waitForLiveSession } from './helpers.mjs';
 
 /**
  * Harness proof, not a feature test: loads the real demo/dist.html, starts a

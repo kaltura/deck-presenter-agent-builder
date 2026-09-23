@@ -16,6 +16,7 @@ jobs:
   e2e:
     name: Browser E2E against the live demo widget
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -28,37 +29,20 @@ jobs:
       - run: npx playwright install --with-deps chromium firefox
 
       # demo/.provisioning-state.json is gitignored (it holds live resource
-      # ids), so a fresh checkout never has it. Without this cache, every run
-      # after the first looks like a clean slate to provision.mjs even though
-      # the live account already has last run's resources, and it fails with
-      # "already exists ... and is not recorded in this project's own state."
-      # The restore key below has no varying part, so it always matches the
-      # last saved state via restore-keys prefix fallback. The save step
-      # further down adds the run id, since actions/cache/save fails if its
-      # exact key already exists.
-      - name: Restore demo provisioning state
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: demo/.provisioning-state.json
-          key: demo-provisioning-state
-          restore-keys: demo-provisioning-state
-
-      # Makes no live call when the restored state already records a
-      # widgetId. It does not diff project.json: pushing changed config is
-      # the update-* commands' job. Needed so a first-ever run on a clean
-      # checkout can still provision the demo project from nothing.
-      - name: Provision the demo project
-        run: node engine/provision.mjs --project demo --yes --json
+      # ids), so it comes from a secret. This way the suite tests the same
+      # agent the maintainers update and eval. A maintainer refreshes the
+      # secret after any command that changes the state file:
+      #   gh secret set DEMO_PROVISIONING_STATE < demo/.provisioning-state.json
+      - name: Write demo provisioning state
+        run: |
+          if [ -z "$STATE" ]; then
+            echo "::error::Set the DEMO_PROVISIONING_STATE secret to the demo project's .provisioning-state.json."
+            exit 3
+          fi
+          printf '%s' "$STATE" > demo/.provisioning-state.json
+          node -e "const s = JSON.parse(require('fs').readFileSync('demo/.provisioning-state.json', 'utf8')); if (!s.steps?.widgetId?.value) { console.error('::error::DEMO_PROVISIONING_STATE has no widgetId. Provision the demo project first.'); process.exit(3); }"
         env:
-          KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
-          KALTURA_ADMIN_SECRET: ${{ secrets.KALTURA_ADMIN_SECRET }}
-
-      - name: Save demo provisioning state
-        if: always()
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: demo/.provisioning-state.json
-          key: demo-provisioning-state-${{ github.run_id }}
+          STATE: ${{ secrets.DEMO_PROVISIONING_STATE }}
 
       # dist.html is gitignored, so CI must rebuild it before serving it.
       - name: Bundle the demo client
@@ -67,12 +51,8 @@ jobs:
           KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
           KALTURA_ADMIN_SECRET: ${{ secrets.KALTURA_ADMIN_SECRET }}
 
+      # On failure, each test prints its masked debug timeline to this log
+      # (test/e2e/helpers.mjs). No trace artifact is uploaded: traces hold the
+      # session token and live ids.
       - name: Run the browser E2E suite
         run: npm run test:e2e
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: failure()
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14

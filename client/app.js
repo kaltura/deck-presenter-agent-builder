@@ -1165,6 +1165,9 @@ function preloadAvatar() {
       conversationManagerUrl: init.conversationManagerUrl,
       srsBaseUrl: init.srsBaseUrl,
       turnServerUrl: init.turnServerUrl,
+      // The SDK does not detect Firefox itself, and Firefox needs ICE policy 'all' on
+      // the video channel instead of the default 'relay'.
+      isFirefox: /firefox/i.test(navigator.userAgent),
       videoEl: video,
       audioEl: audio,
       socketFactory: (url, opts) => window.io(url, opts),

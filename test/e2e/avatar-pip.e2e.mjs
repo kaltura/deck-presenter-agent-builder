@@ -1,5 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { startSession, waitForLiveSession } from './helpers.mjs';
+import { test, expect, startSession, waitForLiveSession } from './helpers.mjs';
 
 test('avatar pip shows a tooltip on hover, drags without breaking pause-toggle, and resizes at every breakpoint', async ({ page }) => {
   await startSession(page);
