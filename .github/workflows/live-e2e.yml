@@ -28,26 +28,40 @@ jobs:
 
       - run: npx playwright install --with-deps chromium firefox
 
-      # demo/.provisioning-state.json is gitignored (it holds live resource
-      # ids), so it comes from a secret. This way the suite tests the same
-      # agent the maintainers update and eval. A maintainer refreshes the
-      # secret after any command that changes the state file:
-      #   gh secret set DEMO_PROVISIONING_STATE < demo/.provisioning-state.json
-      - name: Write demo provisioning state
+      # The bundle needs only the maintained demo's widget id, and it changes
+      # only when the demo is re-provisioned. It comes from the DEMO_WIDGET_ID
+      # repo variable, and this step fails fast if the widget no longer opens
+      # a session, so a stale id never looks like a client bug. It makes the
+      # same two read-only calls the browser makes (startWidgetSession, then
+      # appInit). To set or refresh the variable from the local state file:
+      #   gh variable set DEMO_WIDGET_ID --body "$(node -p "require('./demo/.provisioning-state.json').steps.widgetId.value")"
+      - name: Check the demo widget id is live
         run: |
-          if [ -z "$STATE" ]; then
-            echo "::error::Set the DEMO_PROVISIONING_STATE secret to the demo project's .provisioning-state.json."
+          if [ -z "$DEMO_WIDGET_ID" ]; then
+            echo "::error::Set the DEMO_WIDGET_ID repo variable to the demo project's widget id."
             exit 3
           fi
-          printf '%s' "$STATE" > demo/.provisioning-state.json
-          node -e "const s = JSON.parse(require('fs').readFileSync('demo/.provisioning-state.json', 'utf8')); if (!s.steps?.widgetId?.value) { console.error('::error::DEMO_PROVISIONING_STATE has no widgetId. Provision the demo project first.'); process.exit(3); }"
+          echo "::add-mask::$DEMO_WIDGET_ID"
+          node --input-type=module -e "
+            import { Management } from '@kaltura/intelligent-agents/management';
+            const k = new Management({ partnerId: Number(process.env.KALTURA_PARTNER_ID) });
+            try {
+              const token = await k.sessions.createWidgetToken({ widgetId: process.env.DEMO_WIDGET_ID });
+              await k.application.appInit(token.ks);
+            } catch (err) {
+              console.error('::error::DEMO_WIDGET_ID does not open a session (' + (err.code || err.message) + '). The demo was probably re-provisioned. Refresh the variable from demo/.provisioning-state.json.');
+              process.exit(3);
+            }
+          "
         env:
-          STATE: ${{ secrets.DEMO_PROVISIONING_STATE }}
+          DEMO_WIDGET_ID: ${{ vars.DEMO_WIDGET_ID }}
+          KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
 
       # dist.html is gitignored, so CI must rebuild it before serving it.
       - name: Bundle the demo client
-        run: node engine/bundle.mjs --project demo
+        run: node engine/bundle.mjs --project demo --widget-id="$DEMO_WIDGET_ID"
         env:
+          DEMO_WIDGET_ID: ${{ vars.DEMO_WIDGET_ID }}
           KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
           KALTURA_ADMIN_SECRET: ${{ secrets.KALTURA_ADMIN_SECRET }}
 
