@@ -28,5 +28,7 @@ node engine/bundle.mjs --project demo
 
 The demo is also provisioned on the toolkit's own test account. `.github/workflows/live-e2e.yml`
 runs the browser suite in `test/e2e/` against it on a manual dispatch. Its live ids live only in
-the gitignored `.provisioning-state.json` and in the `DEMO_PROVISIONING_STATE` repo secret the
-workflow reads. Refresh the secret after any command that changes the state file.
+the gitignored `.provisioning-state.json`. The workflow needs only the widget id, from the
+`DEMO_WIDGET_ID` repo secret, and fails before any test runs if that id no longer opens a
+session. The id changes only when the demo is re-provisioned. The refresh command is in the
+workflow file.
