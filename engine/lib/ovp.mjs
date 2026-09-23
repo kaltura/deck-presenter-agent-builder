@@ -38,13 +38,26 @@ export async function uploadFile(ks, filePath, fileName, contentType) {
   return { tokenId: tokenResp.id, size: uploadResp.uploadedFileSize };
 }
 
-/** documentType: 11 = PDF, 12 = HTML. Tries update first; falls through to create only on ENTRY_ID_NOT_FOUND. */
+/** documentType: 11 = PDF, 12 = HTML. Tries update first; falls through to create only on
+ * ENTRY_ID_NOT_FOUND. updateContent replaces the file's bytes but never its stored name, so a
+ * caller that passes a name carrying a version number (e.g. deploy.mjs's "<slug> - App vN") would
+ * otherwise keep showing a stale name after every update. Rename right after a successful content
+ * update, and check the rename response's id too, so a rename that silently lands on the wrong
+ * entry is a thrown error, not a quiet mismatch. */
 export async function updateOrCreateDocumentEntry(ks, entryId, tokenId, name, documentType) {
   if (entryId) {
     const updateResp = await apiMultipart('document_documents/action/updateContent', {
       ks, entryId, 'resource[objectType]': 'KalturaUploadedFileTokenResource', 'resource[token]': tokenId,
     });
-    if (updateResp?.id === entryId) return { entryId, created: false };
+    if (updateResp?.id === entryId) {
+      const renameResp = await apiMultipart('baseEntry/action/update', {
+        ks, entryId, 'baseEntry[objectType]': 'KalturaDocumentEntry', 'baseEntry[name]': name,
+      });
+      if (renameResp?.id !== entryId) {
+        throw new Error(`Entry rename returned an unexpected id: ${JSON.stringify(renameResp).slice(0, 300)}`);
+      }
+      return { entryId, created: false };
+    }
     if (updateResp?.code !== 'ENTRY_ID_NOT_FOUND') {
       throw new Error(`updateContent failed: ${JSON.stringify(updateResp).slice(0, 300)}`);
     }

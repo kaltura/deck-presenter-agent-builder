@@ -56,7 +56,7 @@ One confirmation gate, by design: your account, your content, your call, before 
 - Live captions, keyboard operation, a pause control, a visible mute. Target: WCAG 2.2 AA.
 - Cloning a real voice or face needs a signed consent record in your project repo first.
 
-Safe defaults, not a compliance guarantee. Every one but the `.env` leak scan can be overridden — see `docs/transparency-and-consent.md` for what you still own if you do.
+Safe defaults, not a compliance guarantee. Every one but the `.env` leak scan can be overridden. See `docs/transparency-and-consent.md` for what you still own if you do.
 
 ## Common next steps
 
@@ -65,8 +65,8 @@ Safe defaults, not a compliance guarantee. Every one but the `.env` leak scan ca
 | Changed a slide | `/build-deck-agent ingest` |
 | Want a different tone or wording | `/build-deck-agent prompts` |
 | Want a knowledge base from reference docs, not just the deck | set `project.json`'s `features.knowledgeBase` to `true`, drop docs in `input/`, run `/build-deck-agent kb` |
-| Provisioning died partway through | `/build-deck-agent provision` — resumes from `.provisioning-state.json` |
-| Toolkit updated since you scaffolded | clone this repo, run `node deck-presenter-agent-builder/bin/check-template-update.mjs --project /path/to/your-project` — lists what changed upstream in `engine/`/`client/`; port each change into your project's `scripts/`/`client/` by hand |
+| Provisioning died partway through | `/build-deck-agent provision`, resumes from `.provisioning-state.json` |
+| Toolkit updated since you scaffolded | clone this repo, run `node deck-presenter-agent-builder/bin/check-template-update.mjs --project /path/to/your-project`, lists what changed upstream in `engine/`/`client/`; port each change into your project's `scripts/`/`client/` by hand |
 
 Every stage is idempotent: rerunning one with nothing actually changed makes no live call.
 

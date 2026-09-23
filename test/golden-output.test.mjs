@@ -14,7 +14,7 @@ import { loadContent } from '../engine/lib/load-content.mjs';
 //
 // PROMPTS[0] is the SDK's own PAGE_CONTEXT_PROMPT constant, not derived from
 // this repo's content, so it is checked for presence but left out of the
-// snapshot — an SDK version bump shouldn't fail a content golden test.
+// snapshot. An SDK version bump shouldn't fail a content golden test.
 //
 // To intentionally update a golden file after a real content change, run:
 //   UPDATE_GOLDEN=1 node --test test/golden-output.test.mjs
@@ -68,5 +68,23 @@ for (const { name, path } of PROJECTS) {
       expected,
       `${name}'s content.mjs output no longer matches test/golden/${name}.json. If this is an intended content change, regenerate with: UPDATE_GOLDEN=1 node --test test/golden-output.test.mjs`,
     );
+  });
+}
+
+// The opening phrase is a Jinja template rendered by the platform from the
+// client's request variables. content.mjs must fill {{PERSONA_NAME}} but
+// leave lowercase Jinja variables and {% %} tags for the platform.
+for (const { name, path } of PROJECTS) {
+  test(`opening phrase keeps its Jinja variables: ${name}`, async () => {
+    const { OPENING_PHRASE } = await loadContent(path);
+    for (const v of ['rejoin_slide', 'rejoin_label', 'resume_slide', 'resume_label']) {
+      assert.match(OPENING_PHRASE, new RegExp(`\\{\\{ ${v} \\}\\}`), `${v} should survive substitution`);
+    }
+    assert.match(OPENING_PHRASE, /\{% if rejoin_slide %\}/);
+    assert.match(OPENING_PHRASE, /\{% elif resume_slide %\}/);
+    assert.doesNotMatch(OPENING_PHRASE, /\{\{[A-Z_]+\}\}/, 'every uppercase placeholder should be filled');
+    const rejoin = OPENING_PHRASE.split('{% elif resume_slide %}')[0];
+    const [resume, fresh] = OPENING_PHRASE.split('{% elif resume_slide %}')[1].split(/\{% else %\}(?!.*\{% else %\})/s);
+    for (const branch of [rejoin, resume, fresh]) assert.match(branch, /\bAI\b/, 'every branch discloses AI');
   });
 }

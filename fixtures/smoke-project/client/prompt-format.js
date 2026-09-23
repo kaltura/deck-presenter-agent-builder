@@ -1,5 +1,5 @@
-// Shared by client/app.js (bundled into the browser) and content.mjs (Node) —
-// no Node-only APIs here, so both can import it as-is.
+// Shared by client/app.js (bundled into the browser) and content.mjs (Node).
+// No Node-only APIs here, so both can import it as-is.
 //
 // Splits a markdown file on top-level "# Heading" lines into {heading: body} pairs.
 // Every multi-value prompt file (tool descriptions, nav-nudge templates, route

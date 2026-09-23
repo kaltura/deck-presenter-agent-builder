@@ -1,7 +1,7 @@
 <!-- Copy this file to voice-<id>.md, where <id> is the Kaltura voice catalog
 id you are cloning from. Fill in every field before running the avatar
-provisioning step; the engine refuses to clone a voice without a matching,
-complete record. -->
+provisioning step. The engine only checks that this file exists; it does not
+read the fields, so filling them in is on you. -->
 
 # Voice clone consent
 

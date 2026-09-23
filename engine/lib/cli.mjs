@@ -13,7 +13,7 @@ export const EXIT = {
 /**
  * Thrown instead of calling process.exit() directly. When stdout/stderr are
  * pipes (any non-TTY caller: CI, execFileSync, `| cat`), Node writes to them
- * asynchronously — process.exit() can turn off the process before those
+ * asynchronously. process.exit() can turn off the process before those
  * writes flush, silently dropping the very plan/error text a script or CI
  * step needs to see. Setting process.exitCode and letting the call stack
  * unwind naturally lets pending writes drain before the process exits.

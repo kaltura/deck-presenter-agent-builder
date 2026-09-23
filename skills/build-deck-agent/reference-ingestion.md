@@ -45,9 +45,11 @@ Write `data/slides/NN.json` (two-digit, zero-padded, one file per slide) as it i
 
 `content.key_metrics`, `content.text`, and `content.footnotes` are what the `test` stage's numeric-traceability check grounds every number against later, so a number that matters and isn't captured here is a number the agent will eventually be judged for repeating without a citable source. Add a `footnote` field alongside `content` (not inside it) for one-line asides the deck itself marks as a footnote, matching `fixtures/smoke-project/data/slides/02.json`'s shape if useful as a model.
 
+**Keep `key_metrics` lean.** Put the slide's headline figures there, one entry per figure the slide leads with. When a slide carries a multi-period table or chart (several quarters or years of the same metric), write that history as prose in `content.text`, one sentence per period with the label and value together ("Revenue was 3.1 million dollars in the first quarter of last year and 3.6 million dollars in the first quarter of this year."). The navigation tool returns `content` to the agent in the same turn, and a sentence per period is easier to quote correctly than a wide key-value map.
+
 ## Flag, don't guess
 
-Collect into the single batched question list (presented once, at the `checkpoint` stage — never asked inline mid-ingestion):
+Collect into the single batched question list (presented once, at the `checkpoint` stage, never asked inline mid-ingestion):
 
 - Slides with no speaker notes.
 - Ambiguous chapter boundaries.
@@ -62,17 +64,19 @@ Cluster slides into chapters using, in order of preference: an explicit user-sup
 
 Scan all extracted text (titles, body text, speaker notes) for acronyms and product names.
 
-- For each term needing a phonetic spelling, add a line to `prompts/pronunciation-guide.md` in the file's existing convention: `TERM -> "how it sounds"`. State the form to write, not a list of forms to avoid — negation gets harder for a model to apply reliably as the rule set grows, so every pronunciation rule here is positive by construction.
+- For each term needing a phonetic spelling, add a line to `prompts/pronunciation-guide.md` in the file's existing convention: `TERM -> "how it sounds"`. State the form to write, not a list of forms to avoid. Negation gets harder for a model to apply reliably as the rule set grows, so every pronunciation rule here is positive by construction.
+- Run a separate ampersand pass. Collect every short term joined by `&` (the shape `X&Y`, such as `Q&A` or `R&D`) from slides, notes, and `data/kb/*.md`. Add a row for each one, spelling out the "and": `R&D -> "R and D"`. Text to speech often reads a bare `&` wrong or skips it, and the caption map turns the spoken form back into the printed one.
+- Remove each seeded row the template ships with when the deck and knowledge base never use that term.
 - For each term needing disambiguation or aliasing, add a `Term: explanation` line to `prompts/glossary.md`.
 - Ask the human only about terms you can't confidently phoneticize or define from the surrounding context, folded into the same batched question list as ingestion's flags.
 
 ## Knowledge base drafting (`kb` stage, only if `features.knowledgeBase` is on)
 
-Before drafting, confirm whether Kaltura's own KB re-chunks an uploaded file. If `docs/implementation-appendix.md`'s KB section already states the answer, sizing is only your problem if it says the platform does not re-chunk; otherwise skip the token-budget cap below.
+Before drafting, confirm whether Kaltura's own KB re-chunks an uploaded file. If `reference-implementation-appendix.md`'s KB section already states the answer, sizing is only your problem if it says the platform does not re-chunk; otherwise skip the token-budget cap below.
 
 Chunk support docs and deck content into `data/kb/*.md`, one file per major topic cluster, matching slide chapters where possible. Every file:
 
-- Opens with one explicit context line naming the product or topic and where this content sits relative to the deck (not a generic boilerplate summary — a specific line retrieves measurably better).
+- Opens with one explicit context line naming the product or topic and where this content sits relative to the deck (not a generic boilerplate summary; a specific line retrieves measurably better).
 - Carries frontmatter: `chapter`, `sourceSlides` (real slide numbers, checked by the `prompts` stage's lint), `restrictedTopic` (boolean).
 - Is self-contained per section: restate the entity or acronym instead of using a pronoun or "as shown above", since the KB may re-split the file at any heading.
 - States each number in the same sentence as its label, answer first, then detail.

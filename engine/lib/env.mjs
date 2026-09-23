@@ -20,6 +20,15 @@ export function parseEnvFile(text) {
 }
 
 /**
+ * A bare host ("https://cdnapisec.kaltura.com") gets the /api_v3 path the SDK
+ * needs. Without it, every call returns an HTML 404. A URL with a path is kept.
+ */
+export function normalizeServiceUrl(url) {
+  const trimmed = url.replace(/\/+$/, '');
+  return /^https?:\/\/[^/]+$/i.test(trimmed) ? `${trimmed}/api_v3` : trimmed;
+}
+
+/**
  * Credentials always resolve relative to the project root passed on the CLI,
  * never to this file's own install location.
  */
@@ -34,7 +43,7 @@ export function loadCredentials(projectRoot) {
 
   const partnerId = get('KALTURA_PARTNER_ID');
   const adminSecret = get('KALTURA_ADMIN_SECRET');
-  const serviceUrl = get('KALTURA_SERVICE_URL') || 'https://cdnapisec.kaltura.com/api_v3';
+  const serviceUrl = normalizeServiceUrl(get('KALTURA_SERVICE_URL') || 'https://cdnapisec.kaltura.com/api_v3');
   const messagingUrl = get('KALTURA_MESSAGING_URL') || '';
 
   const missing = [];

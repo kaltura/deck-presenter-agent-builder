@@ -13,7 +13,7 @@
  * phrased so its own words overlap with how someone would ask about it),
  * not a guarantee about Kaltura's own retrieval engine. It runs no LLM, so
  * a low score here means "the KB needs rewriting," never "the model
- * hallucinated" — that second failure mode is out of scope for this check.
+ * hallucinated." That second failure mode is out of scope for this check.
  *
  * Chunking: split each KB file's body (after frontmatter) on "## " headers.
  * Scoring: token-overlap (Jaccard) between the question and each chunk's

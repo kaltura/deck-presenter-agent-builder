@@ -28,8 +28,8 @@ users what a finished project looks like.
 - `privacy.controllerContact` uses an `@example.com` address so the project
   carries no real contact detail while still exercising the field.
 - `features.followUpEmail: false` to keep the demo's provisioning surface
-  small; the other three optional features (contact form, end-session tool,
-  knowledge base) are all on so the demo exercises them.
+  small; the other four optional features (contact form, end-session tool,
+  knowledge base, feedback) are all on so the demo exercises them.
 
 ## What was generated
 

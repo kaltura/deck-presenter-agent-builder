@@ -37,24 +37,25 @@ Extend this base shape per-project with whatever the deck needs: per-chapter sli
 
 ## Rendering `data/routes.json` and the deck-specific directive section
 
-Both are deterministic transforms of `data/nav-rules.json` — no drafting judgment happens here, only rendering:
+Both are deterministic transforms of `data/nav-rules.json`; no drafting judgment happens here, only rendering:
 
 - `data/routes.json`: `[{ topic, entrySlide, aliases: [] }]`, one entry per topic-level nav rule.
 - The deck-specific section of `prompts/base-directive.md` (the file's final `# DECK-SPECIFIC PRESENTING RULES` heading and everything under it): prose that cites the same slide numbers and chapter boundaries as `data/nav-rules.json`, so a reader can spot-check every claim against a real slide.
 
-The caption map (`{ "spoken form": "display form" }`) is a separate deterministic transform, derived from `prompts/pronunciation-guide.md` at bundle time by `engine/lib/caption-map.mjs` — nothing to draft here, it happens automatically when `scripts/bundle.mjs` runs.
+The caption map (`{ "spoken form": "display form" }`) is a separate deterministic transform, derived from `prompts/pronunciation-guide.md` at bundle time by `scripts/lib/caption-map.mjs`. Nothing to draft here: it happens automatically when `scripts/bundle.mjs` runs.
 
 ## Filling placeholders
 
 Walk every file under `prompts/`. Most files already carry `{{PLACEHOLDER}}` tokens with no real wording (from `templates/prompts/`); fill each one from `project.json` and the ingestion/terminology output:
 
-- `goal.md`: `{{GOAL_DETAIL}}` — what success looks like for a session, specific to this deck's actual content, not a generic sales pitch.
-- `restricted-topics.md`: `{{ADDITIONAL_RESTRICTED_TOPICS}}` — one line per entry in `project.json.restrictedTopics`, each with the reason and the redirect behavior (paired positive alternative, see below).
-- `target-audience.md`: `{{AUDIENCE_DESCRIPTION}}` and `{{ASSUMED_BACKGROUND}}` — from `project.json.audience`.
+- `goal.md`: `{{GOAL_DETAIL}}` (what success looks like for a session, specific to this deck's actual content, not a generic sales pitch).
+- `restricted-topics.md`: `{{ADDITIONAL_RESTRICTED_TOPICS}}` (one line per entry in `project.json.restrictedTopics`, each with the reason and the redirect behavior; paired positive alternative, see below).
+- `target-audience.md`: `{{AUDIENCE_DESCRIPTION}}` and `{{ASSUMED_BACKGROUND}}`, from `project.json.audience`.
 - `glossary.md`: `{{ONE_LINE_DEFINITION}}` per harvested term (from the `terms` stage).
-- `pronunciation-guide.md`: already filled by the `terms` stage. A well-known name (a famous brand, person, or place) can resist a plain `TERM -> "how it sounds"` row: the model already "knows" the standard spelling and keeps writing that instead of the phonetic form, even after the row is right. If a live spot check still shows the old spelling, add a short paragraph right after the table stating the rule directly ("BRAND is spoken and captioned as three separate words: 'B and D'. Never write the character '&' for BRAND, in any sentence, in any language. Write 'B and D' instead, every single time, with no exceptions."), push with `engine/update-prompts.mjs`, and spot check again with a few different questions before trusting it.
+- `pronunciation-guide.md`: already filled by the `terms` stage. A well-known name (a famous brand, person, or place) can resist a plain `TERM -> "how it sounds"` row: the model already "knows" the standard spelling and keeps writing that instead of the phonetic form, even after the row is right. If a live spot check still shows the old spelling, add a short paragraph right after the table stating the rule directly ("BRAND is spoken and captioned as three separate words: 'B and D'. Never write the character '&' for BRAND, in any sentence, in any language. Write 'B and D' instead, every single time, with no exceptions."), push with `scripts/update-prompts.mjs`, and spot check again with a few different questions before trusting it.
 - `client/route-answers.md`: one `{{TOPIC_KEY}}` / `{{SLIDE_NUM}}` / `{{SUMMARY}}` block per `data/routes.json` entry.
-- `persona-name.md`, `opening-phrase.md`: from `project.json.personaName`. Keep the name consistent across both files and the base directive's own references to the presenter — a mismatch reads as the agent forgetting who it is.
+- `persona-name.md`, `opening-phrase.md`: from `project.json.personaName`. Keep the name consistent across both files and the base directive's own references to the presenter. A mismatch reads as the agent forgetting who it is.
+- `opening-phrase.md` is a Jinja template the platform renders from the client's request variables. It has three branches: `rejoin_slide` (a dropped connection came back), `resume_slide` (a returning visitor), and a new visitor. Every branch says the presenter is an AI. Keep the lowercase `{{ resume_label }}` style for Jinja variables: `content.mjs` substitutes only exact uppercase `{{KEY}}` placeholders, so Jinja variables pass through untouched. The base directive's OPENING section tells the model what to do after each branch.
 
 Any `{{PLACEHOLDER}}` still present after this step is a bug in this stage, not something to leave for a human to notice later.
 
@@ -67,6 +68,6 @@ Shape validity is already guaranteed by schema-enforced generation, so this lint
 - A reference presented as a proof-point citation points at a slide whose `content.key_metrics` is non-empty.
 - Every KB file's `sourceSlides` frontmatter resolves to real slides inside its stated `chapter`.
 - Every negative directive rule ("never do X") is paired with a stated positive alternative ("say Y instead"). A rule sentence that only forbids, with nothing stated to do instead, fails.
-- The identity-and-disclosure section of `base-directive.md` matches `templates/prompts/base-directive.md`'s fixed skeleton byte for byte, except for resolved `{{VAR}}` substitutions. This section is not project-specific and must never drift.
+- Everything in `base-directive.md` above the final `# DECK-SPECIFIC PRESENTING RULES` heading is the fixed skeleton `create-project.mjs` copied in. It is never rewritten, only its `{{VAR}}` placeholders resolved. If that fixed text needs to change, that is a toolkit-level edit to `templates/prompts/base-directive.md`, not something to draft per project.
 
 A lint failure blocks the `checkpoint` stage. Fix the draft and re-lint; don't hand-wave a miss as acceptable because a human will "probably notice."

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Syncs the intellect's base_directive, glossary, and prompts[] to match
- * this project's own content.mjs. Read-compare-write-verify: no diff means
+ * Syncs the intellect's base_directive, glossary, prompts[], and
+ * opening_phrase to match this project's own content.mjs. Read-compare-write-verify: no diff means
  * no network write, and the post-write read-back must show the intended
  * fields changed with tool_ids/knowledge_ids/capabilities/status untouched.
  *
@@ -41,18 +41,16 @@ async function main() {
   const directiveSame = before.base_directive === content.BASE_DIRECTIVE;
   const glossarySame = eq(before.glossary || null, content.GLOSSARY || null);
   const promptsSame = eq(normalizePrompts(before.prompts), normalizePrompts(content.PROMPTS));
+  const openingSame = before.opening_phrase === content.OPENING_PHRASE;
 
-  if (directiveSame && glossarySame && promptsSame) {
+  if (directiveSame && glossarySame && promptsSame && openingSame) {
     progress(flags, 'Already up to date.');
     result(flags, { upToDate: true, configId });
     return;
   }
 
-  const avatarId = state.steps.avatarId?.value;
-  const avatar = avatarId ? await mgmt.avatars.get(avatarId, ks) : null;
   const personaLint = lintPersonaIdentity({
     name: project.personaName,
-    openingPhrase: avatar?.openingPhrase ?? content.OPENING_PHRASE,
     baseDirective: content.BASE_DIRECTIVE,
     prompts: content.PROMPTS,
   });
@@ -63,6 +61,7 @@ async function main() {
     `  base_directive: ${directiveSame ? 'unchanged' : 'changed'}`,
     `  glossary: ${glossarySame ? 'unchanged' : 'changed'}`,
     `  prompts: ${promptsSame ? 'unchanged' : 'changed'}`,
+    `  opening_phrase: ${openingSame ? 'unchanged' : 'changed'}`,
   ];
   await confirmPlan(flags, planLines);
 
@@ -73,12 +72,14 @@ async function main() {
   for (const f of lint?.findings || []) {
     if (f.severity === 'warning') progress(flags, `[setPrompts lint] warning: ${f.message}`);
   }
+  if (!openingSame) await mgmt.intellectConfig.setOpeningPhrase(configId, content.OPENING_PHRASE, ks);
 
   const after = await mgmt.intellects.get(configId, ks);
   const errors = [];
   if (after.base_directive !== content.BASE_DIRECTIVE) errors.push('base_directive did not apply');
   if (!eq(normalizePrompts(after.prompts), normalizePrompts(content.PROMPTS))) errors.push('prompts did not apply');
   if (!eq(after.glossary || null, content.GLOSSARY || null)) errors.push('glossary did not apply');
+  if (after.opening_phrase !== content.OPENING_PHRASE) errors.push('opening_phrase did not apply');
   if (!eq((after.tool_ids || []).map(String), (before.tool_ids || []).map(String))) errors.push('tool_ids changed unexpectedly');
   if (!eq(after.knowledge_ids || [], before.knowledge_ids || [])) errors.push('knowledge_ids changed unexpectedly');
   if (!eq(after.capabilities || {}, before.capabilities || {})) errors.push('capabilities changed unexpectedly');

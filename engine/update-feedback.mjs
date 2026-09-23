@@ -18,7 +18,7 @@
  * in which case the stale template is left alone and a fresh one is created.
  * The InsightSettings entity and lifecycle rules are looked up by key/
  * systemName and reused rather than duplicated. Both rules are dry-run
- * verified with lifecycle.match() before this command reports success — a
+ * verified with lifecycle.match() before this command reports success. A
  * rule that exists but does not match is the normal failure mode here, not
  * an edge case.
  *

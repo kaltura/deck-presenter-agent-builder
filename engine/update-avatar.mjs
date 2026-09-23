@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * Syncs the avatar's openingPhrase to match this project's own content.mjs,
- * its voice/visual to match project.json avatar.templateName if set, and its
- * voice speed to project.json avatar.voiceSpeed if set (0.7-1.2; the runtime
- * clamps to that band regardless). Leave voiceSpeed null to never touch it.
- * motionControl is not yet driven by any project.json field, so this
- * command never touches it.
+ * Syncs the avatar's voice/visual to match project.json avatar.templateName
+ * if set, and its voice speed to project.json avatar.voiceSpeed if set
+ * (0.7-1.2; the runtime clamps to that band regardless). Leave voiceSpeed
+ * null to never touch it. Also clears the avatar's legacy openingPhrase
+ * field (the opening line now lives on the intellect's own opening_phrase,
+ * owned by update-prompts.mjs; the SDK's own guidance is to leave the
+ * avatar-level field unset). motionControl is not yet driven by any
+ * project.json field, so this command never touches it.
  *
  * Usage: node engine/update-avatar.mjs --project <path> [--dry-run] [--yes] [--json]
  */
@@ -40,7 +42,7 @@ async function main() {
   const ks = await adminKs(mgmt);
   const before = await mgmt.avatars.get(avatarId, ks);
 
-  const desiredOpening = content.OPENING_PHRASE;
+  const desiredOpening = null;
 
   const templateName = project.avatar?.templateName;
   let desiredVoiceId = before.voice?.id;
@@ -54,7 +56,7 @@ async function main() {
     desiredVisualId = template.face.id;
   }
 
-  const openingUpToDate = before.openingPhrase === desiredOpening;
+  const openingUpToDate = before.openingPhrase == null;
   const voiceUpToDate = before.voice?.id === desiredVoiceId;
   const visualUpToDate = before.visual?.id === desiredVisualId;
   const speedUpToDate = desiredSpeed == null || before.voice?.speed === desiredSpeed;
@@ -66,14 +68,13 @@ async function main() {
 
   const personaLint = lintPersonaIdentity({
     name: project.personaName,
-    openingPhrase: desiredOpening,
     baseDirective: content.BASE_DIRECTIVE,
     prompts: content.PROMPTS,
   });
   for (const f of personaLint.findings) progress(flags, `[persona lint] ${f.severity}: ${f.message}`);
 
   const planLines = [`Update avatar for project "${state.slug}" (avatarId ${avatarId}):`];
-  if (!openingUpToDate) planLines.push(`  openingPhrase: ${JSON.stringify(before.openingPhrase)} -> ${JSON.stringify(desiredOpening)}`);
+  if (!openingUpToDate) planLines.push(`  openingPhrase (legacy): ${JSON.stringify(before.openingPhrase)} -> null (the opening now lives on the intellect)`);
   if (!voiceUpToDate) planLines.push(`  voice: ${before.voice?.id} -> ${desiredVoiceId} (template "${templateName}")`);
   if (!visualUpToDate) planLines.push(`  visual: ${before.visual?.id} -> ${desiredVisualId} (template "${templateName}")`);
   if (!speedUpToDate) planLines.push(`  voice.speed: ${before.voice?.speed} -> ${desiredSpeed}`);
@@ -91,7 +92,7 @@ async function main() {
   const after = await mgmt.avatars.get(avatarId, ks);
   const expectedSpeed = desiredSpeed != null ? desiredSpeed : before.voice?.speed;
   const errors = [];
-  if (after.openingPhrase !== desiredOpening) errors.push('openingPhrase did not apply');
+  if (after.openingPhrase != null) errors.push('legacy openingPhrase did not clear');
   if (after.voice?.id !== desiredVoiceId) errors.push('voice did not apply as expected');
   if (after.visual?.id !== desiredVisualId) errors.push('visual did not apply as expected');
   if (expectedSpeed != null && after.voice?.speed !== expectedSpeed) errors.push('voice.speed did not apply as expected');

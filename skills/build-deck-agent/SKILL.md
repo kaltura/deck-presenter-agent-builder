@@ -1,14 +1,14 @@
 ---
 name: build-deck-agent
 description: Turns a deck plus speaker notes into a live Kaltura AI presenter agent. Runs one pipeline stage per invocation, or the full pipeline in order when no stage is named. Use inside a project repo scaffolded by deck-presenter-agent-builder's create-project.mjs (it has its own project.json, prompts/, data/, scripts/, and doctor.mjs at its root).
-argument-hint: "[stage] — one of: credentials, ingest, terms, kb, prompts, checkpoint, provision, deploy, test, report. Omit to run the full pipeline in order."
+argument-hint: "[stage], one of: credentials, ingest, terms, kb, prompts, checkpoint, provision, deploy, test, report. Omit to run the full pipeline in order."
 ---
 
 # Build deck agent
 
 This project's own `CLAUDE.md` (project root) is the ambient context: data contracts, non-negotiables, conventions. Read it first if you have not already this session.
 
-This skill is a **checklist**, not a script. You do the ingestion, drafting, and judgment steps yourself, directly, using your own reading and writing. The engine commands under `scripts/` do only the parts that must be deterministic or that touch the live Kaltura account. Never write a one-off script to replace a step this file describes as something you do directly — that is how a drifted, unreviewable copy of the pipeline logic appears.
+This skill is a **checklist**, not a script. You do the ingestion, drafting, and judgment steps yourself, directly, using your own reading and writing. The engine commands under `scripts/` do only the parts that must be deterministic or that touch the live Kaltura account. Never write a one-off script to replace a step this file describes as something you do directly. That is how a drifted, unreviewable copy of the pipeline logic appears.
 
 Every stage that reaches a mutating `scripts/*.mjs` call passes through that command's own confirmation gate (`--dry-run` prints the plan and exits; without `--yes`/`--no-input` it prompts interactively). Never pass `--yes` on the first run of a stage in a session. Run it once without, read the plan and any diff, and only re-run with `--yes` after you and the human present have actually looked at it.
 
@@ -71,7 +71,7 @@ Run, in order, only the commands whose inputs changed since they last succeeded 
 node scripts/provision.mjs --project .
 ```
 
-This single command does all nine provisioning steps (nav tool → KB → intellect → avatar → agent → widget id) per `docs/implementation-appendix.md`, resuming from `.provisioning-state.json` if a prior run stopped partway. For a narrower change after the first successful run, use the matching update command instead of re-running the whole thing: `scripts/update-prompts.mjs`, `scripts/update-capabilities.mjs`, `scripts/update-avatar.mjs`, `scripts/update-agent.mjs`, `scripts/attach-tool.mjs`, (when `features.followUpEmail` is on) `scripts/update-followup.mjs`, and (when `features.feedback` is on) `scripts/update-feedback.mjs`. Load `reference-provisioning.md` for which command owns which field.
+This single command does all nine provisioning steps (nav tool → KB → intellect → avatar → agent → widget id) per `reference-implementation-appendix.md`, resuming from `.provisioning-state.json` if a prior run stopped partway. For a narrower change after the first successful run, use the matching update command instead of re-running the whole thing: `scripts/update-prompts.mjs`, `scripts/update-capabilities.mjs`, `scripts/update-avatar.mjs`, `scripts/update-agent.mjs`, `scripts/attach-tool.mjs`, (when `features.knowledgeBase` is turned on after the intellect already exists) `scripts/attach-knowledge-base.mjs`, (when a `data/kb/*.md` file changes) `scripts/update-kb.mjs`, (when `features.followUpEmail` is on) `scripts/update-followup.mjs`, and (when `features.feedback` is on) `scripts/update-feedback.mjs`. Load `reference-provisioning.md` for which command owns which field.
 
 Always run the target command once without `--yes` first, read the plan, then re-run with `--yes` only after confirming it with whoever is present.
 
@@ -82,12 +82,16 @@ node scripts/bundle.mjs --project .
 node scripts/deploy.mjs --project .
 ```
 
-`bundle.mjs` refuses to produce output if the disclosure string is missing, `privacy.controllerName`/`controllerContact` are empty, or the welcome copy's promised session length exceeds `sessionMaxSeconds`. Fix `project.json` or the prompts, don't work around the refusal. `deploy.mjs` needs `provision`'s widget id already in `.provisioning-state.json`.
+`bundle.mjs` warns, but still builds, when the disclosure string is missing, `privacy.controllerName`/`controllerContact` are empty, the welcome copy's promised session length exceeds `sessionMaxSeconds`, or synthetic content has no label. Treat every warning as something to fix in `project.json` or the prompts before deploying, not something to override. `overrides.acknowledgeWarnings` in `project.json` exists for a deliberate, human-confirmed exception, not a default habit. `bundle.mjs` does hard-refuse on structural problems it cannot warn past: a slide-numbering gap, a missing widget id, or a bundle that would leak an `.env` value. `deploy.mjs` needs `provision`'s widget id already in `.provisioning-state.json`.
 
 ## Stage: test
 
-Load `reference-eval.md` now and run its full checklist: smoke test, deterministic numeric traceability, deterministic slide routing, LLM-judged talking-point coverage and tone (reference-guided, temperature 0), held-out questions from `data/eval/held-out.json`, adversarial turns over `restrictedTopics`, one off-topic redirect check, one embedded-instruction resistance check, a pronunciation spot-check over every harvested term, and the accessibility checklist from `templates/project/CLAUDE.md`'s accessibility notes. Two consecutive failures required before hard-failing a stochastic check (flakiness guard). Write the report to `docs/eval-runs/<timestamp>.json` as "N passed / N total", never a percentage.
+Load `reference-eval.md` now and run its full checklist: smoke test, deterministic numeric traceability, deterministic slide routing, LLM-judged talking-point coverage and tone (reference-guided, temperature 0), held-out questions from `data/eval/held-out.json`, adversarial turns over `restrictedTopics`, one off-topic redirect check, one embedded-instruction resistance check, a pronunciation spot-check over every harvested term, and the accessibility checklist from ARCHITECTURE.md section 9. Two consecutive failures required before hard-failing a stochastic check (flakiness guard). Write the report to `docs/eval-runs/<timestamp>.json` as "N passed / N total", never a percentage.
+
+Also run `node scripts/verify-startup-timing.mjs --project .` against the deployed agent: it checks the median startup latency (greeting, first reply) over several real browser runs against a budget, and writes the result to `docs/timing-runs/`.
 
 ## Stage: report
 
 Write or update `docs/build-log.md`: what was asked, what was decided (including every best-guess default from **checkpoint**'s ten-item cap), what was generated, which disclosure and synthetic-content label were applied and why, the live agent's share URL, and a link to the latest `docs/eval-runs/` file. This is the project's own record, not something that goes back into the deck-presenter-agent-builder toolkit repo.
+
+Add each later change as a new entry at the top, in the shape `templates/project/docs/build-log.md` shows: a dated heading with the version, an Issue/Cause/Fix table, a Checked list naming the commands run and what they showed, a live check table when something was checked on the deployed agent, and a Not yet deployed list.

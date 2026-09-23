@@ -1,0 +1,81 @@
+name: Nightly startup timing
+
+# Runs scripts/verify-startup-timing.mjs against the live agent every night.
+# Changes no account config, but each run starts real avatar sessions. It
+# opens the bundled page in headless Chromium and measures
+# startup. Off until you set the KALTURA_WIDGET_ID repo variable and the
+# KALTURA_PARTNER_ID and KALTURA_ADMIN_SECRET repo secrets. Until then every
+# run skips and stays green. The widget id is public (it is in the deployed
+# page), so it is a variable, not a secret.
+on:
+  schedule:
+    - cron: '30 7 * * *'
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: 'Measured runs (budgets check against the median)'
+        type: string
+        default: '3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-timing
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.cfg.outputs.ready }}
+    steps:
+      - id: cfg
+        env:
+          WIDGET_ID: ${{ vars.KALTURA_WIDGET_ID }}
+          PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
+          ADMIN_SECRET: ${{ secrets.KALTURA_ADMIN_SECRET }}
+        run: |
+          if [ -n "$WIDGET_ID" ] && [ -n "$PARTNER_ID" ] && [ -n "$ADMIN_SECRET" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Nightly timing is off. Set the KALTURA_WIDGET_ID variable and the KALTURA_PARTNER_ID and KALTURA_ADMIN_SECRET secrets to turn it on."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  timing:
+    needs: check
+    if: needs.check.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Build dist.html
+        env:
+          KALTURA_PARTNER_ID: ${{ secrets.KALTURA_PARTNER_ID }}
+          KALTURA_ADMIN_SECRET: ${{ secrets.KALTURA_ADMIN_SECRET }}
+          WIDGET_ID: ${{ vars.KALTURA_WIDGET_ID }}
+        run: node scripts/bundle.mjs --project . --widget-id "$WIDGET_ID"
+
+      - name: Measure startup against the live agent
+        env:
+          RUNS: ${{ inputs.runs || '3' }}
+        run: node scripts/verify-startup-timing.mjs --project . --json --runs "$RUNS"
+
+      - name: Upload the timing report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: timing-report-${{ github.run_id }}
+          path: docs/timing-runs/
+          if-no-files-found: ignore
+          retention-days: 90

@@ -22,9 +22,9 @@ const mgmt = new Management({ partnerId, adminSecret });
 const admin = await mgmt.sessions.createAdminToken();   // -> { ks, ... }
 ```
 
-Every management call takes `admin.ks` as its last argument. Resources used below: `mgmt.sessions`, `mgmt.tools`, `mgmt.knowledge`, `mgmt.intellects`, `mgmt.avatars`, `mgmt.agents`, `mgmt.application`, `mgmt.catalog` (custom voice and visual), `mgmt.lifecycle` (post-session rules), plus the top-level `mgmt.converseOnce`.
+Every management call takes `admin.ks` as its last argument. Resources used below: `mgmt.sessions`, `mgmt.tools`, `mgmt.knowledge`, `mgmt.intellects`, `mgmt.intellectConfig` (opening phrase, tool ids, knowledge ids), `mgmt.avatars`, `mgmt.agents`, `mgmt.application`, `mgmt.catalog` (custom voice and visual), `mgmt.lifecycle` (post-session rules), `mgmt.insightSettings` and `mgmt.emailTemplates` (follow-up email and feedback), plus the top-level `mgmt.converseOnce`.
 
-Named helpers exported alongside `Management`, all used below: `tools.client`, `tools.clientToolReadiness`, `stripServerManaged`, `lintPersonaIdentity`, `mergeCapabilityWrite`.
+Named helpers exported alongside `Management`, all used below: `tools.client`, `lintPersonaIdentity`, `mergeCapabilityWrite`.
 
 **Credential rule (6.6).** `adminSecret` is read from the project's `.env` once, exchanged for a session key at run start, and never logged. `createAdminToken()` is that exchange. Pass `admin.ks` onward; never re-read the secret per call.
 
@@ -35,7 +35,7 @@ Named helpers exported alongside `Management`, all used below: `tools.client`, `
 | Term | What it is |
 |---|---|
 | **intellect** / `configId` | The agent's brain: prompts, base directive, glossary, capabilities, linked tool ids, linked knowledge ids. Numeric id. |
-| **avatar** / `avatarId` | Face and voice only. A `{ voice, visual, openingPhrase }` triple. Hex string id. |
+| **avatar** / `avatarId` | Face and voice only. A `{ voice, visual }` pair. Hex string id. Its legacy `openingPhrase` field stays null: the opening lives on the intellect. |
 | **agent** / `agentId` | Binds one intellect to one or more avatars, carries the display name and tags. UUID. |
 | **tool** | A callable the intellect can invoke. The presenter needs one client-side navigation tool. UUID. |
 | **knowledge record** / `knowledgeId` | A RAG corpus definition pointing at a category of uploaded entries. Numeric id. |
@@ -68,29 +68,21 @@ Each step's id goes into `.provisioning-state.json` **the moment it returns**, n
 
 ### 0. Pre-flight, read-only
 
-Runs before anything is created. All of it must pass.
-
-```js
-const k = mgmt.knowledge;
-for (const m of ['findOrCreateCategory', 'uploadMarkdown', 'addRecord', 'corpusStatus']) {
-  if (typeof k[m] !== 'function') fail(`SDK too old: knowledge.${m} missing.`);
-}
-```
-
-Also check, in this order, and fail with a specific message per case:
+Runs before any resource is created, only for what `features.knowledgeBase` needs:
 
 1. At least one `*.md` file exists in the project's `data/kb/`.
 2. `capabilities.use_knowledge_base === 'on'` in the config about to be written. **Partner config is cached for roughly 24 hours**, so this has to be right at creation time; flipping it later does not take effect promptly.
-3. If cloning a voice or visual: read the source avatar and confirm it has both.
+
+The clone-avatar check runs later, inline at the avatar step (step 7), right before the clone call: read the source avatar and confirm it has both a voice and a visual, and confirm the consent record exists in the project repo (ARCHITECTURE.md 6.6, 10).
 
 ```js
 const source = await mgmt.avatars.get(sourceAvatarId, admin.ks);   // READ only
 if (!source.voice?.id || !source.visual?.id) fail('Source avatar has no voice or visual.');
 ```
 
-The clone path is additionally gated on a consent record existing in the project repo (ARCHITECTURE.md 6.6, 10). Check the file before this API call, so a missing consent record costs nothing.
+By this point the nav tool, the optional contact/end-session tools, the knowledge base, and the intellect already exist. A missing consent record still fails the run before the clone call itself, so nothing mutating happens on the avatar's side, but the earlier steps are not undone.
 
-### 1. Navigation tool
+### 1. Navigation tool, plus optional contact and end-session tools
 
 ```js
 const cfg = tools.client(navToolDefinition);      // typed builder, validates the shape
@@ -99,6 +91,8 @@ const tool = await mgmt.tools.add(cfg, admin.ks);
 ```
 
 `tools.client(...)` is the builder for a client-executed tool (the browser handles the call). `tools.api`, `tools.csv`, and `tools.code` exist for other kinds. `navToolDefinition` is rendered from `data/nav-rules.json`, never hand-written (ARCHITECTURE.md 5).
+
+When `project.json`'s `features.contactForm` / `features.endSessionTool` are on, the same builder and `mgmt.tools.add` call create a contact-form tool and an end-session tool right here, before the intellect exists in step 6. All three tool ids feed `tool_ids` on the intellect. Each is checked against existing tool names first (`assertNamedResourceFree`), so a name collision fails before any call, not after.
 
 ### 2. Knowledge base category
 
@@ -149,9 +143,20 @@ const rec = await k.addRecord({
 
 Markdown uploads are picked up by the document indexer, `type: 3`. Send all three anyway; the caption and OCR indexers are inert for markdown and cost nothing.
 
-**Then wait before step 5.** There is no reliable completion signal for indexing at this point. The reference implementation waits a fixed 60 seconds, overridable by flag. Creating the intellect too early links a corpus that is not yet queryable.
+**Then wait, and check the corpus below, before creating the intellect in step 6.** There is no reliable completion signal for indexing at this point. The reference implementation waits a fixed 60 seconds, overridable by flag. Creating the intellect too early links a corpus that is not yet queryable.
 
-### 5. Intellect, everything in one write
+### 5. Corpus readiness poll
+
+```js
+const corpus = await k.corpusStatus({ categoryId: cat.id }, admin.ks);
+// -> { entryCount, populated, categoryIds, perCategory }
+```
+
+Poll every 10 seconds against a 5-minute deadline. **Non-fatal on timeout:** warn and continue.
+
+**Known limitation:** this counts entries present in the category. It cannot confirm that embedding finished. Treat a healthy count as necessary, not sufficient. `mgmt.knowledge.isIndexed(knowledgeId, ks)` and `mgmt.knowledge.getLinkage(configId, ks)` give further read-only signal and belong in the verify command (6.8), not in the provisioning gate.
+
+### 6. Intellect, everything in one write
 
 ```js
 const intel = await mgmt.intellects.create({
@@ -162,6 +167,7 @@ const intel = await mgmt.intellects.create({
   base_directive: baseDirective,
   glossary,
   capabilities,                    // includes use_knowledge_base: 'on'
+  opening_phrase: openingPhrase,   // Jinja template, rendered from request_vars
   tool_ids: [tool.id],
   knowledge_ids: [Number(rec.id)],
   }, admin.ks);
@@ -170,7 +176,7 @@ const intel = await mgmt.intellects.create({
 
 Log `intel.warnings` if non-empty. They are advisory, not failures.
 
-**`allow_client_variables: true` is not optional for a presenter agent.** It gates `request_vars`, which is how the client passes the current slide as page context on every turn. With it off, turns that depend on page context come back empty with no error, which is a hard bug to find later. Set it at creation.
+**`allow_client_variables: true` is not optional for a presenter agent.** It gates `request_vars`, which is how the client passes the current slide as page context on every turn, and the `resume_*` / `rejoin_*` values the opening phrase template branches on. With it off, turns that depend on page context come back empty with no error, which is a hard bug to find later. Set it at creation.
 
 One write, not a create-then-patch, because 6.6 records one id per step and a half-configured active intellect is reachable.
 
@@ -206,17 +212,6 @@ Five rules, each learned the hard way:
 
 No endpoint enumerates the capabilities or the account's per-key settings, so the list above is the contract. Fail pre-flight on an unknown key rather than sending it.
 
-### 6. Corpus readiness poll
-
-```js
-const corpus = await k.corpusStatus({ categoryId: cat.id }, admin.ks);
-// -> { entryCount, populated, categoryIds, perCategory }
-```
-
-Poll every 10 seconds against a 5-minute deadline. **Non-fatal on timeout:** warn and continue.
-
-**Known limitation:** this counts entries present in the category. It cannot confirm that embedding finished. Treat a healthy count as necessary, not sufficient. `mgmt.knowledge.isIndexed(knowledgeId, ks)` and `mgmt.knowledge.getLinkage(configId, ks)` give further read-only signal and belong in the verify command (6.8), not in the provisioning gate.
-
 ### 7. Avatar
 
 ```js
@@ -224,7 +219,7 @@ const voice = { id: source.voice.id };
 if (source.voice.speed != null) voice.speed = source.voice.speed;
 const visual = { ...source.visual };   // id, motionControl, crop, and any other fields
 
-const av = await mgmt.avatars.create({ voice, visual, openingPhrase }, admin.ks);
+const av = await mgmt.avatars.create({ voice, visual }, admin.ks);
 // -> av.id   (hex string)
 ```
 
@@ -292,49 +287,33 @@ const wr = await mgmt.application.resolveWidgetId(ag.agentId, admin.ks);
 
 This is the only id the browser client needs. It is what gets baked into the bundle (6.7).
 
-### 10. Smoke test, non-fatal
+Provisioning itself sends no conversational turn. The one text-turn smoke test, `mgmt.converseOnce(configId, 'Hello! What can you help me with?')`, is `verify.mjs`'s `smoke` subcommand (6.8), run separately, after provisioning, never as part of it.
+
+## Syncing client tools after provisioning
+
+`engine/attach-tool.mjs` is the one generic command for every client tool `content.mjs` declares: navigation always, plus contact and end-session when their `project.json` feature flag is on. A tool with no recorded id is created; one that already has an id is compared and only sent through `tools.update` on a real diff. It never calls `tools.add` for a tool this project has already recorded.
 
 ```js
-const smoke = await mgmt.converseOnce(intel.configId, 'Hello! What can you help me with?');
-// -> { text, status, error }
+const desired = tools.client(TOOL_DEF);
+const current = await mgmt.tools.get(existingId, admin.ks);
+
+// The server adds its own defaults (variables_mapping, response_mapping,
+// display_name, add_to_history, log_request/response, timeout, a
+// `default: null` on every arg, ...) and may reorder `args` keys. Strip and
+// stable-stringify both sides before comparing, or every run reports a
+// false diff on a config that already matches.
+if (!eqToolConfig(current.config, desired)) {
+  await mgmt.tools.update(existingId, { name: desired.name, config: desired }, admin.ks);
+}
 ```
 
-One text turn. Creates a conversation, changes no config. A failure here warns; the provisioned stack is still valid and 6.8 will exercise it properly.
-
-## Optional stage: extra client tools
-
-The presenter needs one navigation tool (step 1). A contact form and an end-session button are two more client tools with the identical shape, which is why the engine ships **one** generic `attach-tool` command rather than one per tool.
+Then reconcile `tool_ids` on the intellect in one call, once every tool body is in its final state:
 
 ```js
-const wanted = tools.client(TOOL_DEF);   // marks it client-executed
-
-// The server adds its own defaults (display_name, add_to_history, per-arg
-// defaults), so compare only the keys you set, recursively.
-const subset = (want, have) =>
-  (want && typeof want === 'object' && !Array.isArray(want))
-    ? Object.keys(want).every((k) => subset(want[k], have?.[k]))
-    : JSON.stringify(want) === JSON.stringify(have);
-
-const created = await mgmt.tools.add(wanted, admin.ks);            // create once
-await mgmt.tools.update(created.id, { name: wanted.name, config: wanted }, admin.ks);
+await mgmt.intellectConfig.setToolIds(configId, finalToolIds, admin.ks);
 ```
 
-Then attach it, read-merge-write:
-
-```js
-const before = await mgmt.intellects.get(configId, admin.ks);
-const body = stripServerManaged(before, configId);      // drops read-only fields
-body.tool_ids = [...(before.tool_ids || []), created.id];
-
-const readiness = tools.clientToolReadiness(body);      // -> { warnings[] }
-await mgmt.intellects.update(body, admin.ks);
-```
-
-`stripServerManaged` exists because a plain round-trip of a `get` result fails validation: the response carries fields the update endpoint rejects. Never hand-maintain that list.
-
-`clientToolReadiness` warns when the intellect is configured in a way that stops a client tool from ever firing. Print its warnings; they are the difference between a tool that exists and a tool that works.
-
-After the write, assert that `base_directive`, `prompts`, `knowledge_ids`, `capabilities`, and `status` are unchanged, and exit non-zero if not. Attaching a tool must not silently rewrite the persona.
+After the write, assert that `base_directive`, `prompts`, `glossary`, `knowledge_ids`, and `capabilities` are unchanged, and exit non-zero if not. Attaching a tool must not silently rewrite the persona.
 
 ## Optional stage: follow-up email after a session
 
@@ -399,23 +378,21 @@ The agent's own summary wording is a separate field: `mgmt.agents.update({ agent
 
 ## Failure, resume, and state
 
-On any step throwing, write the partial state and exit non-zero (`5`, per the ARCHITECTURE.md 4 exit-code contract):
+Each id is written to `.provisioning-state.json` the moment its call returns (`recordStep` in `engine/lib/state.mjs`, an atomic temp-file-then-rename write), so the state on disk is always the partial state. On any step throwing, report and exit `5` (the ARCHITECTURE.md 4 exit-code contract):
 
 ```js
-function fail(step, err) {
-  const detail = err?.detail || err?.message || String(err);
-  console.error(`Provision failed at step "${step}": ${detail}`);
-  console.error('Created so far:', JSON.stringify(created, null, 2));
-  writeState({ failedStep: step, createdSoFar: created, error: detail });
-  process.exit(5);
+} catch (err) {
+  progress(flags, `\nProvision failed: ${err.detail || err.message || err}`);
+  progress(flags, `Partial state written to .provisioning-state.json. Re-run to resume.`);
+  process.exitCode = EXIT.PROVISIONING;
 }
 ```
 
 `err.detail` first: `KalturaError` carries the server's message there, and `err.message` alone is often just the HTTP status.
 
-A `--resume` run reads `createdSoFar`, skips every step with a recorded id, and refuses if any recorded id is on the protected list below.
+There is no resume flag. A plain re-run reads the state file and skips every step that already has a recorded id.
 
-**Flags the reference implementation exposes, worth keeping:** `--dry-run`, `--force`, `--resume`, and `--kb-wait-ms=<n>` for the step-4 wait.
+**Flags `provision.mjs` exposes:** `--dry-run`, `--yes`/`--no-input`, `--json`, `--force` (re-provision when a `widgetId` is already recorded), and `--kb-wait-ms=<n>` for the wait after the step-4 knowledge record.
 
 ### Protected-id guard
 
@@ -457,26 +434,27 @@ Three things this pattern gets right and a naive `update` does not:
 
 For point edits there are also `snapshot(configId, ks)` / `restore(snapshot, ks)` / `diffSnapshots(a, b)`, which are the right primitive behind a `--dry-run` diff.
 
-### The six update commands and their calls
+### The update commands and their calls
 
 Every field the pipeline writes is reachable from one of these. Do not grow this into one command per field.
 
 | Command | Calls |
 |---|---|
-| `update-prompts` | `mgmt.intellects.setPrompts(configId, PROMPTS, ks, { baseDirective, glossary })` → `{ result, lint }` |
+| `update-prompts` | `mgmt.intellects.setPrompts(configId, PROMPTS, ks, { baseDirective, glossary })` → `{ result, lint }`. Also `mgmt.intellectConfig.setOpeningPhrase(configId, OPENING_PHRASE, ks)` on a diff. It rejects `""`; pass `null` to clear. |
 | `update-capabilities` | `mgmt.intellects.setCapabilities(configId, CAPABILITIES, ks)` → `{ capabilities, result }`. Also `setClientVariablesEnabled(configId, bool, ks)`. |
-| `update-avatar` | `mgmt.avatars.update({ id, openingPhrase })`, or with `voice` / `visual` / `visual.motionControl`. An idempotent patch: omitted fields are left alone. |
+| `update-avatar` | `mgmt.avatars.update({ id, voice, visual })`, plus `openingPhrase: null` to clear the legacy field. An idempotent patch: omitted fields are left alone. |
 | `update-agent` | `mgmt.agents.update({ agentId, displayName, adminTags, maxConversationLength, summaryOverridePrompt })` |
-| `attach-tool` | `mgmt.tools.add` / `mgmt.tools.update`, then the read-merge-write attach above. Config-only sync never calls `add`. |
-| `update-followup` | `mgmt.lifecycle.list` / `create` / `match`, plus the Messaging API template calls. |
+| `attach-tool` | `mgmt.tools.add` / `mgmt.tools.update` for nav, plus contact/end-session when their feature flag is on, then `mgmt.intellectConfig.setToolIds(configId, toolIds, ks)` to reconcile. Config-only sync never calls `add`. |
+| `attach-knowledge-base` | `mgmt.knowledge.findOrCreateCategory` / `uploadMarkdown` / `addRecord`, then `mgmt.intellectConfig.setKnowledgeIds` and `mgmt.knowledge.setEnabled(configId, true, ks)`. Creates and attaches the knowledge base on a project's first run with `features.knowledgeBase` on, and uploads any new local `data/kb/*.md` file to an already-attached KB. Editing an existing file's content is `update-kb`'s job. |
+| `update-kb` | Diffs each local `data/kb/*.md` file's hash against the hash recorded when it was last uploaded. For a changed file: two `uploadtoken.add` + upload pairs (one for the document entry, one for the markdown asset) followed by `baseentry.updateContent` and `attachment_attachmentasset.setContent`, then polls `mgmt.knowledge.entryStatus` until re-indexed. Same entry ids throughout; refuses a local file with no recorded entry rather than creating one. |
+| `update-followup` | `mgmt.lifecycle.list` / `create` / `match`, plus `mgmt.emailTemplates`. Requests a `FEEDBACK` insight. |
+| `update-feedback` | Same shape as `update-followup`, independent feature flag (`features.feedback`), own insight key `SESSIONFEEDBACK` so both can run without a race on the same `session_ended` event. A template whose `appGuid` has gone stale (agent re-provisioned) is left alone; a fresh one is created instead of updated. |
 
 **`mgmt.agents.update` is a partial patch and rejects `intellect` outright.** The body is `{ agentId, ...fieldsYouAreChanging }`. Including `intellect` returns 400 even when the value is correct. To move an agent to a different intellect, that is not this call.
 
 ### Persona identity spans three fields
 
-The persona name lives in `BASE_DIRECTIVE`, in the `name` prompt block, and in the avatar's `openingPhrase`. Two of them are on the intellect, one is on the avatar, so a rename touches two resources.
-
-Changing only `openingPhrase` leaves the model introducing itself by the old name, because the directive and the prompt block still carry it. `update-prompts` and `update-avatar` therefore both read the current value of all three and refuse to write a set that disagrees.
+The persona name lives in `BASE_DIRECTIVE`, in the `name` prompt block, and in the intellect's `opening_phrase`. All three are on the intellect, so `update-prompts` writes them together and refuses to write a set that disagrees.
 
 `lintPersonaIdentity` is the SDK's check for exactly this. `setPrompts` returns its findings in `lint.findings[]`; run it in `--dry-run` too, so the mismatch surfaces before the write.
 
@@ -509,9 +487,14 @@ document_documents/action/updateContent
 
 document_documents/action/addFromUploadedFile
   ks, documentEntry[name], documentEntry[documentType], uploadTokenId
+
+baseEntry/action/update
+  ks, entryId, baseEntry[objectType]=KalturaDocumentEntry, baseEntry[name]
 ```
 
 Try `updateContent` when the state file has an entry id; fall through to `addFromUploadedFile` only on code `ENTRY_ID_NOT_FOUND`. Any other error is a real failure, not a reason to create a second entry.
+
+`updateContent` replaces the file's bytes but never its stored name. A caller that passes a name carrying a version number (deploy.mjs's `<slug> - App vN`) needs a rename right after a successful content update, or the entry keeps showing a stale name. Call `baseEntry/action/update` right after `updateContent` returns the matching entry id, and check the rename response's `id` too: a rename that lands on the wrong entry must be a thrown error, not a quiet mismatch.
 
 `documentType`: `11` for PDF, `12` for HTML.
 
@@ -541,7 +524,7 @@ The bundler inlines `client/` plus the vendored SDK plus generated data into one
 - **Values baked in by source rewrite, not by env at runtime:** `WIDGET_ID`, `PARTNER_ID`, `PDF_URL`, `SDK_VERSION`. Each rewrite is verified present afterward, and the build fails if a replacement did not take. Only the widget id and partner id go in, never `adminSecret` (ARCHITECTURE.md 5).
 - **The runtime `loadData()` fetch body is replaced with pre-loaded literals** so the deployed page makes no data fetches. Post-bundle validation asserts no `fetch(` for slide or prompt paths survives and that the inlined globals are present.
 - **Use function replacers for the CSS and JS injection**, `html.replace(tag, () => code)`. A string replacer interprets `$&` and friends inside the injected code as replacement patterns, which corrupts any regex-escaping helper in the bundle.
-- **Validate slide data before bundling:** every file parses, every file has a numeric `slide`, and the set is contiguous with no gaps and no duplicates. Report missing and duplicate numbers by name. The reference hardcodes the expected count; the generic engine reads it from `project.json`.
+- **Validate slide data before bundling:** every file parses, every file has a numeric `slide`, and the set is contiguous with no gaps and no duplicates. Report missing and duplicate numbers by name. The expected count is the number of `*.json` files in `data/slides/` on disk (`readdirSync`), never a hardcoded number or a `project.json` field.
 - **Write the output atomically:** temp file plus `renameSync`, so a killed build never leaves a half-written bundle that deploys.
 - **Read `SDK_VERSION` from the SDK's own `package.json`** so the version shown in the UI cannot drift from what shipped.
 - The bundle is self-contained except two CDN scripts (PDF rendering, websocket transport), which stay external. Validation asserts both are still referenced.
@@ -564,16 +547,17 @@ const sess = new KalturaAvatarSession({ ...token, videoEl, audioEl, toolCallName
 | Group | Events |
 |---|---|
 | Connection | `stateChange`, `streamReady`, `mediaReady`, `error`, `warning` |
-| Speech | `avatarStartTalking`, `avatarStopTalking`, `interrupted`, `transcript`, `brainSegment`, `responsePending`, `responseSettled` |
+| Speech | `avatarStartTalking`, `avatarStopTalking`, `interrupted`, `transcript`, `brainSegment`, `responsePending`, `responseSettled`, `turnEnd` |
 | Health | `reconnecting`, `reconnected`, `brainStalled`, `capacityChanged`, `toolSpiralDetected`, `toolSpiralRecovering`, `spiralRecovered` |
 | Session | `disclosure`, `timeWarning`, `timeExpired`, `ended` |
 
 Handling notes that cost real debugging time:
 
 - **`streamReady` is not `mediaReady`.** The stream can exist before media is playable. Gate the UI on `mediaReady`.
-- **`mediaReady` can simply never arrive.** Negotiation can stall or the SDK can drop straight to `error` without it. Arm a bounded timeout (client's `AVATAR_CONNECT_TIMEOUT_MS`) on `connecting` and on `reconnecting`, clear it on `mediaReady`/`error`/`ended`/`timeExpired`, and swap the spinner for a visible failed state on expiry — otherwise the loading cover spins forever with only a toast that fades after 4s.
+- **`mediaReady` can simply never arrive.** Negotiation can stall or the SDK can drop straight to `error` without it. Arm a bounded timeout (client's `AVATAR_CONNECT_TIMEOUT_MS`) on `connecting` and on `reconnecting`, clear it on `mediaReady`/`error`/`ended`/`timeExpired`, and swap the spinner for a visible failed state on expiry. Otherwise the loading cover spins forever with only a toast that fades after 4s.
 - **Autoplay blocking is normal.** Keep a one-time click that calls `sess.startPlayback()`.
 - **The navigation tool call can arrive before `avatarStopTalking`.** Drive slide state from the tool call. Waiting for the speech event makes the deck lag the narration.
+- **Schedule autoplay from `turnEnd` and `avatarStopTalking`, not `responseSettled`.** `responseSettled` fires on the first output, and a navigation tool call counts, so it lands before the avatar has said anything. `interrupted` ends speech without an `avatarStopTalking`, so clear the speaking flag there too.
 - **On `brainStalled`, re-send once with a resume instruction** that names the current slide and says to continue presenting it and not to navigate. Without the no-navigate clause the recovery jumps the deck.
 - **Captions have no separate server channel.** They are rendered from the same text stream, through `CaptionService(session, { replacements })` with `onCaption(({ text, clear }) => ...)`. `replacements` is the caption map from ARCHITECTURE.md 5, which turns spoken-letter forms back into normal spelling. Default the toggle off and expose it on a button and a key.
 - **`disclosure` carries the platform's own AI-disclosure text.** It does not replace the always-on line in ARCHITECTURE.md 9.
@@ -588,6 +572,8 @@ The verify command must be read-only, with no mutating call reachable from it. U
 | `snapshot <label>` | Write current live avatar and intellect state to a file. |
 | `compare` | Diff a previous snapshot against now; diff live config against the local generated content; report per-field. |
 | `smoke` | One `mgmt.converseOnce` turn. Creates a conversation, changes no config. |
+
+`verify-startup-timing.mjs` is a separate read-only script, not a subcommand of `verify.mjs`: it drives the deployed `dist.html` with `chromium` (via the toolkit's existing `@playwright/test` dependency) through welcome, disclaimer, greeting, and a first reply, and checks the median of `--runs` (default 3) against two budgets: time to the greeting and time to the first reply. Only the local HTTP server for `dist.html` is local; the avatar session it drives is the real, already-deployed widget. Exits `4` when a budget is missed, and writes every run's timings to `docs/timing-runs/<timestamp>.json` in the project.
 
 `compare` is where the numeric checks in 6.8 hang. Assert, per field: `base_directive`, `prompts`, and `glossary` match the local generated files; `capabilities` matches; `tool_ids` and `knowledge_ids` are exactly the ids this project's state file claims; `allow_client_variables` is `true`. Sort object keys before stringifying so field order never shows as a diff.
 
@@ -609,13 +595,12 @@ The verify command must be read-only, with no mutating call reachable from it. U
 | Capabilities you did not touch turned off | `capabilities` is full-replace. Write all 15 keys every time. |
 | Intellect creation returns 500 | `think_process` was sent. It is not a capability. |
 | A capability flip has no effect | Resolved value is cached at the account-config layer for ~24h. |
-| Agent still introduces itself by the old name | Only `openingPhrase` changed. The base directive and the `name` prompt block also carry it. |
+| Agent still introduces itself by the old name | Only the opening phrase changed. The base directive and the `name` prompt block also carry it. Run `update-prompts`, which writes all three. |
 | `agents.update` returns 400 | The body included `intellect`. It is a partial patch and rejects that field. |
 | Duplicate voices or visuals piling up on the account | `catalog.createVoice` / `createVisual` are not idempotent. Skip when state has an id. |
 | Avatar looks letterboxed with dark side bars | The visual was a portrait padded to square. The stream is 512 by 512; extend the backdrop instead. |
 | Lifecycle rule exists but never fires | It was conditioned on `object.agent_id`. Widget-token threads carry `agent_id: "default"`. |
 | `sendInsightEmail` sends nothing | Hardcoded `appGuid`. Read it from `agents.get(agentId).appGuid`; it regenerates on re-provision. |
-| Intellect update rejects a body you just read | Round-tripped a `get` result. Pass it through `stripServerManaged` first. |
 | Deck lags the narration by one slide | Slide state waited for `avatarStopTalking` instead of the tool call. |
 
 ## Offline verification checklist
@@ -623,9 +608,9 @@ The verify command must be read-only, with no mutating call reachable from it. U
 Prove the engine works by hand-running against a throwaway `project.json`, a sandbox `.env`, and a few stub slide files. Concretely:
 
 1. `doctor` passes against the sandbox account.
-2. `provision --dry-run` prints all nine planned operations and makes no network write.
-3. `provision` succeeds; `.provisioning-state.json` holds nine ids.
-4. Kill `provision` mid-run, then `--resume`: it reuses the recorded ids and creates nothing twice.
+2. `provision --dry-run` prints every planned operation for the features turned on in `project.json`, and makes no network write.
+3. `provision` succeeds; `.provisioning-state.json` holds an id for every step it ran.
+4. Kill `provision` mid-run, then run it again: it reuses the recorded ids and creates nothing twice.
 5. `verify compare` reports every field matching the local content.
 6. `bundle` then `deploy` produces a reachable share URL with a content hash in it.
 7. Re-run `update-prompts` with no local change: it reports "already up to date" and makes no call. Same for `update-capabilities` and `update-avatar`.

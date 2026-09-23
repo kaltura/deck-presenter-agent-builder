@@ -6,7 +6,7 @@
  * Usage:
  *   node engine/verify.mjs --project <path> snapshot <label>
  *   node engine/verify.mjs --project <path> compare
- *   node engine/verify.mjs --project <path> smoke ["question"]
+ *   node engine/verify.mjs --project <path> smoke ["question"] [--dry-run]
  *
  * snapshot writes the current live avatar + intellect to
  * .verify-snapshots/<label>.json (gitignored, project-local).
@@ -14,7 +14,7 @@
  * to catch unintended side effects) and always diffs the live avatar/intellect
  * against what this project's own content.mjs says they should be.
  * smoke sends one text turn to the intellect; it creates a conversation and
- * changes no config.
+ * changes no config. With --dry-run it prints the turn instead of sending it.
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -109,7 +109,8 @@ async function main() {
       prompts: promptsMatch(vi.prompts, content.PROMPTS),
       glossary: eq(vi.glossary, content.GLOSSARY),
       allow_client_variables: vi.allow_client_variables === true,
-      opening_phrase: va.openingPhrase === content.OPENING_PHRASE,
+      opening_phrase: vi.opening_phrase === content.OPENING_PHRASE,
+      legacy_avatar_opening_phrase_cleared: va.openingPhrase == null,
     };
     const capDiff = Object.entries(content.CAPABILITIES).filter(([k, v]) => vi.capabilities?.[k] !== v);
     checks.capabilities = capDiff.length === 0;

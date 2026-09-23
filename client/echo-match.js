@@ -1,5 +1,5 @@
-// Shared by client/app.js (bundled into the browser) and test/*.test.mjs —
-// no Node-only or DOM-only APIs here, so both can import it as-is.
+// Shared by client/app.js (bundled into the browser) and test/*.test.mjs.
+// No Node-only or DOM-only APIs here, so both can import it as-is.
 //
 // Normalizes typed/spoken text for fuzzy-match comparison: the SDK's
 // transcript echo of a typed question can differ in case, whitespace, or

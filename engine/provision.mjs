@@ -9,6 +9,7 @@
  */
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { client as buildClientTool } from '@kaltura/intelligent-agents/management';
 import { parseFlags, projectRootFrom, confirmPlan, progress, result, fail, EXIT, runMain } from './lib/cli.mjs';
 import { connect, adminKs } from './lib/kaltura.mjs';
@@ -37,6 +38,16 @@ async function main() {
     progress(flags, `Already fully provisioned (widgetId=${state.steps.widgetId.value}). Pass --force to re-provision.`);
     result(flags, { alreadyProvisioned: true, ...Object.fromEntries(Object.entries(state.steps).map(([k, v]) => [k, v.value])) });
     return;
+  }
+
+  // Checked before the plan, so a missing consent record stops the run before
+  // anything is created, not at the avatar step with half the resources live.
+  if (project.avatar?.source === 'cloned' && !state.steps.avatarId) {
+    const cloneFromId = project.avatar?.cloneFromAvatarId;
+    if (!cloneFromId) fail(flags, EXIT.VALIDATION, 'avatar.source is "cloned" but project.json avatar.cloneFromAvatarId is not set.');
+    const consentFiles = [`consent/voice-${cloneFromId}.md`, `consent/visual-${cloneFromId}.md`];
+    const missing = consentFiles.filter((f) => !existsSync(resolve(projectRoot, f)));
+    if (missing.length) fail(flags, EXIT.VALIDATION, `Cloning avatar ${cloneFromId} needs consent records at ${consentFiles.join(' and ')}. Missing: ${missing.join(', ')}. Refusing to clone without them.`);
   }
 
   const features = project.features || {};
@@ -132,8 +143,10 @@ async function main() {
       for (const f of kbFiles) {
         if (kbEntries.some((e) => e.file === f && e.entryId)) continue;
         progress(flags, `[kbEntries] uploading ${f}...`);
-        const up = await k.uploadMarkdown({ markdown: readFileSync(resolve(kbDir, f), 'utf8'), name: f, categoryId }, ks);
-        kbEntries.push({ file: f, entryId: up.entryId, markdownAssetId: up.markdownAssetId });
+        const markdown = readFileSync(resolve(kbDir, f), 'utf8');
+        const up = await k.uploadMarkdown({ markdown, name: f, categoryId }, ks);
+        // contentHash lets update-kb.mjs skip a file that has not changed since this upload.
+        kbEntries.push({ file: f, entryId: up.entryId, markdownAssetId: up.markdownAssetId, contentHash: createHash('sha256').update(markdown).digest('hex') });
         recordStep(projectRoot, state, 'kbEntries', { value: kbEntries, origin: 'created' });
       }
 
@@ -187,6 +200,7 @@ async function main() {
         capabilities: content.CAPABILITIES,
         tool_ids: toolIds,
         knowledge_ids: knowledgeId ? [knowledgeId] : [],
+        opening_phrase: content.OPENING_PHRASE,
       }, ks);
       configId = intel.configId;
       if (intel.warnings?.length) progress(flags, `[configId] lint warnings: ${JSON.stringify(intel.warnings)}`);
@@ -201,20 +215,15 @@ async function main() {
       progress(flags, `[avatarId] creating avatar (source: ${avatarSource})...`);
       let voice, visual;
       if (avatarSource === 'cloned') {
-        const cloneFromId = project.avatar?.cloneFromAvatarId;
-        if (!cloneFromId) throw new Error('avatar.source is "cloned" but project.json avatar.cloneFromAvatarId is not set.');
-        const consentVoice = resolve(projectRoot, `consent/voice-${cloneFromId}.md`);
-        const consentVisual = resolve(projectRoot, `consent/visual-${cloneFromId}.md`);
-        if (!existsSync(consentVoice) || !existsSync(consentVisual)) {
-          throw new Error(`Cloning avatar ${cloneFromId} needs consent records at ${consentVoice} and ${consentVisual}. Refusing to clone without them.`);
-        }
+        // The consent records were checked before the plan.
+        const cloneFromId = project.avatar.cloneFromAvatarId;
         const source = await mgmt.avatars.get(cloneFromId, ks);
         if (!source?.voice?.id || !source?.visual?.id) throw new Error(`avatars.get(${cloneFromId}) returned no voice/visual id.`);
         voice = { id: source.voice.id, ...(source.voice.speed != null ? { speed: source.voice.speed } : {}) };
         visual = { ...source.visual };
       } else {
         // listTemplates() returns {voice, face} bundles (a template's visual
-        // is under `face`, not `visual` — distinct from avatars.get()'s
+        // is under `face`, not `visual`, distinct from avatars.get()'s
         // `visual` shape used on the cloned path above). avatars.create()
         // itself wants `visual: {id}`, so map face.id into it here.
         const templates = [];
@@ -227,7 +236,7 @@ async function main() {
         voice = { id: template.voice.id };
         visual = { id: template.face.id };
       }
-      const av = await mgmt.avatars.create({ voice, visual, openingPhrase: content.OPENING_PHRASE }, ks);
+      const av = await mgmt.avatars.create({ voice, visual }, ks);
       avatarId = av?.id;
       if (!avatarId) throw new Error('avatars.create returned no id.');
       recordStep(projectRoot, state, 'avatarId', { value: avatarId, origin: 'created' });
@@ -243,7 +252,7 @@ async function main() {
         displayName: content.AGENT_DISPLAY_NAME,
         intellect: { intellectType: 'genie', id: configId },
         avatarIds: [avatarId],
-        adminTags: ['deck-presenter-agent-builder', project.slug],
+        adminTags: [...(project.adminTags || []), 'deck-presenter-agent-builder', project.slug],
         maxConversationLength: content.MAX_CONVERSATION_LENGTH,
       }, ks);
       agentId = ag?.agentId;

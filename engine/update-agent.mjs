@@ -36,7 +36,7 @@ async function main() {
 
   const desired = {
     displayName: content.AGENT_DISPLAY_NAME,
-    adminTags: ['deck-presenter-agent-builder', project.slug],
+    adminTags: [...(project.adminTags || []), 'deck-presenter-agent-builder', project.slug],
     maxConversationLength: content.MAX_CONVERSATION_LENGTH,
   };
 

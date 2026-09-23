@@ -8,3 +8,5 @@ input/
 *.local.md
 *.local.txt
 .DS_Store
+# Downloaded session debug logs hold audience data
+debug-log*.txt

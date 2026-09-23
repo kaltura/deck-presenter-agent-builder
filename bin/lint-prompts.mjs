@@ -12,7 +12,7 @@
  *      resolve to real slides inside that chapter's range.
  *   4. The identity-and-disclosure skeleton (everything in base-directive.md before
  *      "# DECK-SPECIFIC PRESENTING RULES") matches templates/prompts/base-directive.md
- *      byte for byte — that section is copied, never drafted per project.
+ *      byte for byte. That section is copied, never drafted per project.
  *
  * Two rules from reference-prompts.md are reported as heuristic warnings, not hard
  * failures: proof-point citations pointing at a slide with real key_metrics, and

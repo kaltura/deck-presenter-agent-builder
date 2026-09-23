@@ -5,7 +5,7 @@
  * repository, so real deck content structurally cannot reach here.
  *
  * Usage:
- *   npx deck-presenter-agent-builder create <dir> [--slug <slug>] [--yes] [--json] [--dry-run]
+ *   npx --yes --prefer-online github:kaltura/deck-presenter-agent-builder create <dir> [--slug <slug>] [--yes] [--json] [--dry-run]
  *   node bin/create-project.mjs <dir> [--slug <slug>] [--yes] [--json] [--dry-run]
  */
 import { existsSync, mkdirSync, cpSync, writeFileSync, readFileSync } from 'node:fs';
@@ -143,7 +143,10 @@ async function main() {
     type: 'module',
     engines: { node: '>=22' },
     dependencies: { '@kaltura/intelligent-agents': toolkitPkg.dependencies['@kaltura/intelligent-agents'] },
-    devDependencies: { esbuild: toolkitPkg.devDependencies.esbuild },
+    // @playwright/test: scripts/verify-startup-timing.mjs launches chromium
+    // through it. Run `npx playwright install chromium` once before that
+    // script's first use.
+    devDependencies: { esbuild: toolkitPkg.devDependencies.esbuild, '@playwright/test': toolkitPkg.devDependencies['@playwright/test'] },
   };
   writeFileSync(resolve(targetDir, 'package.json'), JSON.stringify(projectPkg, null, 2) + '\n');
 
@@ -157,6 +160,7 @@ async function main() {
 
   progress(flags, `Scaffolded ${targetDir}.`);
   progress(flags, 'Next: copy your deck and speaker notes into input/, fill in .env and project.json, then open this folder in Claude Code and run /build-deck-agent.');
+  progress(flags, 'Nightly eval and timing workflows are in .github/workflows/ and stay off until you set, in the GitHub repo settings: secrets KALTURA_PARTNER_ID and KALTURA_ADMIN_SECRET, variables KALTURA_CONFIG_ID (eval) and KALTURA_WIDGET_ID (timing), and optionally EVAL_NOTIFY_USER. See README.md.');
   result(flags, { ok: true, targetDir, slug, templateVersion: templateVersion() });
 }
 

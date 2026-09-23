@@ -45,7 +45,7 @@ async function main() {
 
   // The CDN content hash busts caches on every deploy regardless, but the human-readable
   // version label only changes if VERSION in client/app.js was bumped. Deploying twice
-  // under the same version is almost always a forgotten bump, not intentional — fail
+  // under the same version is almost always a forgotten bump, not intentional. Fail
   // loudly before any network call rather than shipping silently under a stale label.
   const toolkitClientJs = new URL('../client/app.js', import.meta.url);
   const versionMatch = readFileSync(toolkitClientJs, 'utf8').match(/const VERSION = '([^']+)'/);
@@ -87,7 +87,7 @@ async function main() {
     progress(flags, 'Bundling dist.html...');
     const { version, distPath, html } = await bundle(projectRoot, { pdfUrl, widgetId, partnerId });
     // The CDN caches by full URL (including query string) for around 100 days. VERSION
-    // in app.js is bumped by hand, not on every edit — a content hash always changes
+    // in app.js is bumped by hand, not on every edit. A content hash always changes
     // when the bundle does, so relying on VERSION alone can serve a stale edge copy.
     const contentHash = createHash('sha256').update(html).digest('hex').slice(0, 10);
 
@@ -111,7 +111,7 @@ async function main() {
       const existing = await findShortLinkBySystemName(ks, shortLinkSystemName);
       if (existing) {
         finalShortLinkId = existing.id;
-        progress(flags, `  found existing short link ${finalShortLinkId} — updating`);
+        progress(flags, `  found existing short link ${finalShortLinkId}, updating`);
         await updateShortLink(ks, finalShortLinkId, htmlUrl);
       } else {
         progress(flags, '  creating new short link...');

@@ -1,2 +1,1 @@
-Hello, I am {{PERSONA_NAME}}, an AI presenter. I will walk you through
-{{PRODUCT_OR_TOPIC}}. Ask me anything as we go.
+{% if rejoin_slide %}This is {{PERSONA_NAME}}, your AI presenter, back after a short connection drop. We're on {% if rejoin_label %}{{ rejoin_label }}{% else %}slide {{ rejoin_slide }}{% endif %}.{% elif resume_slide %}Welcome back. I'm {{PERSONA_NAME}}, an AI presenter. Last time we were on {% if resume_label %}{{ resume_label }}{% else %}slide {{ resume_slide }}{% endif %}. Want to pick up right there, or start over from the beginning?{% else %}Hello, I'm {{PERSONA_NAME}}, an AI presenter. I'll walk you through {{PRODUCT_OR_TOPIC}}, and you can ask me anything as we go. Ready to start?{% endif %}
