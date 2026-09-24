@@ -4,18 +4,18 @@ Turn a deck into a live AI presenter agent. Drop in a PDF and speaker notes, ans
 
 What it does that you'd otherwise have to do by hand:
 
-**Content analysis**
+**🔍 Content analysis**
 - Reads every slide twice, a text pass and a vision pass, and diffs them: a mismatch goes to you, not to a guess.
 - Extracts every number independently, twice, and diffs those too. Once a wrong figure is written down, nothing downstream re-checks it against the real slide.
 
-**Agent instructions**
+**🧭 Agent instructions**
 - Drafts the navigation rules first, then re-derives them independently and reconciles the two, because a first draft that looks right can still cite the wrong slide.
 - Lints every slide reference, proof-point citation, and negative rule against the deck itself. A miss blocks the build before it ships.
 
-**Knowledge base**
+**📚 Knowledge base**
 - Chunks by heading and tags every file with its real source slides, checked by the same lint.
 
-**Evals**
+**✅ Evals**
 - Checks numbers and slide routing with deterministic code, not a model judge, which misses a wrong number at close to chance.
 - Judges tone and coverage against the real slide content, with a flakiness guard before anything hard-fails.
 - Runs held-out questions you write yourself, phrased the way a real visitor would ask, reported separately from the generated ones.
