@@ -4,9 +4,10 @@ Turn a deck into a live AI presenter agent. Drop in a PDF and speaker notes, ans
 
 What it does that you'd otherwise have to do by hand:
 
-- Reads every slide twice, a text pass and a vision pass, and cross-checks every number between them, so a misread figure never becomes the agent's ground truth.
-- Drafts and lints the navigation rules, prompts, and knowledge base against your deck's actual slide numbers, so the agent can't be told to cite a slide that doesn't exist.
-- Builds an eval suite before anything goes live: deterministic checks for numbers and slide routing, LLM-judged checks for tone and coverage, plus held-out questions you write yourself.
+- Reads every slide twice, a text pass and a vision pass, and cross-checks every number between them before it's written down. Once a wrong figure lands in the agent's data, nothing downstream catches it, so this is the one step where a second read matters most.
+- Drafts the navigation rules from your slides, then re-derives them independently and reconciles the two, because a first draft can look right and still cite the wrong slide.
+- Lints the navigation rules, prompts, and knowledge base against your deck's actual slide numbers, so a broken build stops before it ships, not after a visitor hits it.
+- Builds an eval suite before anything goes live: deterministic code checks numbers and slide routing (a model judge misses wrong numbers at close to chance), an LLM judge checks tone and coverage against the real slide content, and you supply held-out questions phrased the way a real visitor would ask.
 
 Built on Kaltura's agent platform. Needs a Kaltura account, not API knowledge.
 
