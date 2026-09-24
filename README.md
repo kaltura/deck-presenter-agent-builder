@@ -2,6 +2,12 @@
 
 Turn a deck into a live AI presenter agent. Drop in a PDF and speaker notes, answer a few questions, get a deployed page where an avatar presents your slides and answers questions about them.
 
+What it does that you'd otherwise have to do by hand:
+
+- Reads every slide twice, a text pass and a vision pass, and cross-checks every number between them, so a misread figure never becomes the agent's ground truth.
+- Drafts and lints the navigation rules, prompts, and knowledge base against your deck's actual slide numbers, so the agent can't be told to cite a slide that doesn't exist.
+- Builds an eval suite before anything goes live: deterministic checks for numbers and slide routing, LLM-judged checks for tone and coverage, plus held-out questions you write yourself.
+
 Built on Kaltura's agent platform. Needs a Kaltura account, not API knowledge.
 
 Want to see a finished example before you start? `demo/` is a full worked project (a fictional deck, prompts, and knowledge base) checked into this repo end to end.
