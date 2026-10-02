@@ -19,14 +19,14 @@ The management surface is a single `Management` instance with one resource objec
 import { Management, tools } from '@kaltura/intelligent-agents/management';
 
 const mgmt = new Management({ partnerId, adminSecret });
-const admin = await mgmt.sessions.createAdminToken();   // -> { ks, ... }
+const admin = await mgmt.sessions.createAdminToken({ userId });   // -> { ks, ... }
 ```
 
 Every management call takes `admin.ks` as its last argument. Resources used below: `mgmt.sessions`, `mgmt.tools`, `mgmt.knowledge`, `mgmt.intellects`, `mgmt.intellectConfig` (opening phrase, tool ids, knowledge ids), `mgmt.avatars`, `mgmt.agents`, `mgmt.application`, `mgmt.catalog` (custom voice and visual), `mgmt.lifecycle` (post-session rules), `mgmt.insightSettings` and `mgmt.emailTemplates` (follow-up email and feedback), plus the top-level `mgmt.converseOnce`.
 
 Named helpers exported alongside `Management`, all used below: `tools.client`, `lintPersonaIdentity`, `mergeCapabilityWrite`.
 
-**Credential rule (6.6).** `adminSecret` is read from the project's `.env` once, exchanged for a session key at run start, and never logged. `createAdminToken()` is that exchange. Pass `admin.ks` onward; never re-read the secret per call.
+**Credential rule (6.6).** `adminSecret` is read from the project's `.env` once, exchanged for a session key at run start, and never logged. `createAdminToken({ userId })` is that exchange. SDK 1.25+ requires `userId` (the server makes it the owner of what the token creates). The engine passes one fixed service id, `ADMIN_USER_ID` in `engine/lib/kaltura.mjs`. Pass `admin.ks` onward; never re-read the secret per call.
 
 **The SDK also ships `provision()`**, a one-call factory (`generateProfile` → `intellect.add` → `intellect.update` → preset voice/visual → `avatar.create` → `agent.create` → `resolveWidgetId`). Do not use it for this engine. It picks a preset voice and visual from a plain-English brief and gives no per-step resume point, and 6.6 needs explicit control over the KB, the nav tool, and the consent-gated avatar, plus a recorded id after every step. Read it as a reference for call shapes only.
 

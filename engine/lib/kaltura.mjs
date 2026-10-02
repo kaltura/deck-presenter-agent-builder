@@ -15,16 +15,27 @@ export function connect(projectRoot, flags) {
       `Missing credential(s): ${creds.missing.join(', ')}. Set them in ${creds.envPath} (see .env.example).`,
     );
   }
-  const mgmt = new Management({
-    partnerId: creds.partnerId,
-    adminSecret: creds.adminSecret,
-    ovpUrl: creds.serviceUrl,
-    ...(creds.messagingUrl ? { messagingUrl: creds.messagingUrl } : {}),
-  });
+  // SDK 1.26 validates the URLs in the constructor: malformed, credential-bearing,
+  // or public http:// values throw. That is a bad .env, so it exits 3, not 1.
+  let mgmt;
+  try {
+    mgmt = new Management({
+      partnerId: creds.partnerId,
+      adminSecret: creds.adminSecret,
+      ovpUrl: creds.serviceUrl,
+      ...(creds.messagingUrl ? { messagingUrl: creds.messagingUrl } : {}),
+    });
+  } catch (err) {
+    fail(flags, EXIT.CREDENTIAL, `Invalid Kaltura setting in ${creds.envPath}: ${err.detail || err.message}`);
+  }
   return { mgmt, partnerId: creds.partnerId, serviceUrl: creds.serviceUrl };
 }
 
+// SDK 1.25+ requires a userId on admin tokens. The server makes it the owner of
+// what the session creates, so it is one fixed service id, not a person.
+export const ADMIN_USER_ID = 'deck-presenter-agent-builder';
+
 export async function adminKs(mgmt) {
-  const { ks } = await mgmt.sessions.createAdminToken();
+  const { ks } = await mgmt.sessions.createAdminToken({ userId: ADMIN_USER_ID });
   return ks;
 }
