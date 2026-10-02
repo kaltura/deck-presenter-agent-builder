@@ -64,7 +64,7 @@ This is architectural, not a gitignore rule (ARCHITECTURE.md 3): real decks live
 
 Node 22 or newer. ESM only (`"type": "module"`). Keep dependencies minimal; reach for the standard library first.
 
-The SDK is a pinned git dependency, `github:kaltura/intelligent-agents-sdk#v1.23.2`. It is a public MIT repo with no install-time build scripts, so `npm ci` resolves it cleanly and esbuild bundles it into the client. Import `@kaltura/intelligent-agents/management` server side and `/experience` in the client.
+The SDK is a pinned git dependency, `github:kaltura/intelligent-agents-sdk#v1.26.0`. It is a public MIT repo with no install-time build scripts, so `npm ci` resolves it cleanly and esbuild bundles it into the client. Import `@kaltura/intelligent-agents/management` server side and `/experience` in the client.
 
 ## Things that are easy to get wrong
 
